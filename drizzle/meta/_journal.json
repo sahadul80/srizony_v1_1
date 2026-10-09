@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791052276704,
+      "tag": "0000_ordinary_pixie",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791063353783,
+      "tag": "0001_robust_public_forms",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791220000000,
+      "tag": "0002_structural_entity_database",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791250000000,
+      "tag": "0003_security_storage_hardening",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791260000000,
+      "tag": "0004_schema_drift_repair",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791270000000,
+      "tag": "0005_cms_modules",
+      "breakpoints": true
+    }
+  ]
+}

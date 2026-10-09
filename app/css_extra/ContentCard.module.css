@@ -1,0 +1,484 @@
+/* ───────────────────────────────────────────────────────────────
+   ContentCard — one card, four variants (media · illustration · icon · plain)
+   • Only --sf-* tokens from globals.css (palette, shape, fonts, shadows)
+   • Adapts to its own width (container queries), so the same card works in
+     a 4-up desktop grid and a 2-up phone grid without page-level overrides
+   • Unnamed container on purpose: CSS-module tooling can rename named
+     containers inconsistently between the definition and the @container rule
+   ─────────────────────────────────────────────────────────────── */
+
+/* Seamless loop: the gradient tile is 200% wide and starts/ends on the same colour,
+   and the animation travels exactly one tile (-200% position = 2 x card width),
+   so the last frame is pixel-identical to the first and no restart is visible. */
+@keyframes cardBorderFlow {
+  from { background-position: 0 0, 0% 50%; }
+  to { background-position: 0 0, -200% 50%; }
+}
+
+.card {
+  container-type: inline-size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--sf-card);
+  color: var(--sf-ink);
+  border: 2px solid transparent;
+  border-radius: calc(var(--sf-radius-shape) * 1.2);
+  box-shadow: var(--sf-shadow-soft);
+  text-decoration: none;
+  background:
+    linear-gradient(var(--sf-card), var(--sf-card)) padding-box,
+    linear-gradient(90deg, var(--sf-primary), var(--sf-secondary), var(--sf-accent), var(--sf-primary)) border-box;
+  background-size: 100% 100%, 200% 100%;
+  background-repeat: no-repeat, repeat-x;
+  background-position: 0 0, 0% 50%;
+  animation: cardBorderFlow 8s linear infinite;
+  animation-fill-mode: none;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.card::before {
+  display: none;
+}
+
+.link {
+  cursor: pointer;
+}
+.link:focus-visible {
+  outline: 3px solid var(--sf-focus);
+  outline-offset: 3px;
+}
+
+@media (hover: hover) {
+  .link:hover {
+    transform: translateY(-2px);
+    border-color: color-mix(in srgb, var(--sf-primary) 38%, var(--sf-border));
+    box-shadow: var(--sf-shadow);
+  }
+  .link:hover .moreArrow {
+    background: var(--sf-primary);
+    color: var(--sf-on-primary);
+    transform: translateX(3px);
+  }
+}
+.link:focus-visible .moreArrow {
+  background: var(--sf-primary);
+  color: var(--sf-on-primary);
+}
+
+/* ── Variants ─────────────────────────────────── */
+
+.vPlain {
+  box-shadow: inset 3px 0 0 var(--sf-primary), var(--sf-shadow-soft);
+}
+@media (hover: hover) {
+  .vPlain.link:hover {
+    box-shadow: inset 3px 0 0 var(--sf-primary), var(--sf-shadow);
+  }
+}
+
+/* ── Media (photo or illustration) ────────────── */
+
+.media {
+  position: relative;
+  display: block;
+  flex: 0 0 auto;
+  width: 100%;
+  min-height: 148px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: var(--sf-soft);
+}
+
+/* two classes: beats the global single-class .media-image sizing */
+.media .mediaFill {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.illus {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: clamp(0.75rem, 6cqi, 1.5rem);
+}
+.illus svg {
+  width: 88%;
+  height: 88%;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* ── Tag ──────────────────────────────────────── */
+
+.tag {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--sf-accent) 40%, var(--sf-border));
+  border-radius: var(--sf-radius-shape);
+  background: color-mix(in srgb, var(--sf-accent) 22%, var(--sf-card));
+  color: var(--sf-ink);
+  font-size: var(--sf-fs-xs);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.tagOver {
+  position: absolute;
+  top: 0.65rem;
+  left: 0.65rem;
+  z-index: 1;
+  border-color: color-mix(in srgb, var(--sf-on-image) 24%, transparent);
+  background: color-mix(in srgb, var(--sf-footer-bg) 62%, transparent);
+  color: var(--sf-on-image);
+  backdrop-filter: blur(8px);
+}
+
+/* ── Content ──────────────────────────────────── */
+
+.content {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: clamp(1rem, 4cqi, 1.35rem);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  margin-bottom: 0.25rem;
+  border: 1px solid var(--sf-border);
+  border-radius: calc(var(--sf-radius-shape) * 0.58);
+  background: var(--sf-soft);
+  color: var(--sf-primary);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--sf-font-display);
+  font-size: var(--sf-fs-h3);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+.body {
+  /* Desktop cards keep the complete summary instead of clipping it to a few lines. */
+  display: block;
+  margin: 0 0 0.4rem;
+  overflow: visible;
+  color: var(--sf-muted);
+  font-size: var(--sf-fs-sm);
+  line-height: 1.6;
+  text-wrap: pretty;
+  overflow-wrap: anywhere;
+}
+
+:global(html[lang='bn']) .title {
+  letter-spacing: 0;
+  line-height: 1.4;
+}
+:global(html[lang='bn']) .body {
+  line-height: 1.75;
+}
+
+/* ── "Learn more" row ─────────────────────────── */
+
+.more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.75rem;
+  border-top: 1px dashed color-mix(in srgb, var(--sf-primary) 30%, transparent);
+  color: var(--sf-link);
+  font-size: var(--sf-fs-sm);
+  font-weight: 700;
+}
+
+.moreArrow {
+  display: grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: 50%;
+  background: var(--sf-soft);
+  color: var(--sf-primary);
+  transition: background-color 0.2s, color 0.2s, transform 0.2s;
+}
+
+/* ── Narrow cards (e.g. 2-up on phones) ───────── */
+
+@container (max-width: 15rem) {
+  .media {
+    min-height: 118px;
+    aspect-ratio: 4 / 3;
+  }
+  .content {
+    gap: 0.35rem;
+    padding: 0.75rem;
+  }
+  .icon {
+    width: 2.25rem;
+    height: 2.25rem;
+  }
+  .title {
+    font-size: var(--sf-fs-md);
+  }
+  .body {
+    font-size: var(--sf-fs-sm);
+    line-height: 1.5;
+  }
+  .tag {
+    font-size: var(--sf-fs-xs);
+  }
+  .tagOver {
+    top: 0.5rem;
+    left: 0.5rem;
+  }
+  .more {
+    justify-content: flex-end;
+    padding-top: 0.5rem;
+  }
+  /* keep the label for screen readers, show just the arrow */
+  .moreLabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+}
+
+/* ── Wide cards ───────────────────────────────── */
+
+@container (min-width: 26rem) {
+  .media {
+    min-height: 168px;
+    aspect-ratio: 16 / 9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none; }
+  .card,
+  .moreArrow {
+    transition: none;
+  }
+  .link:hover {
+    transform: none;
+  }
+}
+
+.mobileDescriptionHidden .body {
+  transition: opacity .22s ease, max-height .22s ease, margin .22s ease, padding .22s ease;
+}
+
+@media (max-width: 700px) {
+  .mobileDescriptionHidden .body {
+    display: none;
+  }
+}
+
+/* Home/impact cards: keep descriptions on larger screens, titles-only on phones. */
+.mobileTitleOnly .body,
+.mobileTitleOnly .more {
+  transition: opacity .22s ease, max-height .22s ease, margin .22s ease, padding .22s ease;
+}
+
+@media (max-width: 700px) {
+  .mobileTitleOnly .body {
+    display: none;
+  }
+
+  .mobileTitleOnly .more {
+    display: none;
+  }
+}
+
+/* Homepage programme cards: 40% icon / 60% title with an interactive glow. */
+@keyframes featureIconGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--sf-primary) 18%, transparent), 0 0 12px color-mix(in srgb, var(--sf-primary) 25%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--sf-primary) 8%, transparent), 0 0 22px color-mix(in srgb, var(--sf-primary) 36%, transparent);
+  }
+}
+
+.horizontalFeature .horizontalContent {
+  gap: 0.85rem;
+}
+
+.featureRow {
+  display: grid;
+  grid-template-columns: minmax(0, 40fr) minmax(0, 60fr);
+  gap: clamp(0.55rem, 1.2cqi, 0.9rem);
+  align-items: center;
+  min-width: 0;
+}
+
+.featureIcon {
+  width: 100%;
+  max-width: none;
+  height: auto;
+  aspect-ratio: 1;
+  margin: 0;
+  border-color: color-mix(in srgb, var(--sf-primary) 32%, var(--sf-border));
+  background: color-mix(in srgb, var(--sf-primary) 7%, var(--sf-card));
+  color: var(--sf-primary);
+  animation: featureIconGlow 2.5s ease-in-out infinite;
+  transition: box-shadow 0.2s ease, filter 0.2s ease, color 0.2s ease, background-color 0.2s ease;
+}
+
+.featureIcon svg {
+  width: clamp(22px, 3cqi, 32px);
+  height: clamp(22px, 3cqi, 32px);
+}
+
+.featureTitle {
+  min-width: 0;
+  margin: 0;
+  font-size: var(--sf-fs-h3);
+  line-height: 1.28;
+  text-shadow: none;
+  overflow-wrap: anywhere;
+  transition: color 0.2s ease, text-shadow 0.2s ease;
+}
+
+.horizontalFeature:hover .featureIcon,
+.horizontalFeature:focus-visible .featureIcon,
+.horizontalFeature:focus-within .featureIcon,
+.horizontalFeature:active .featureIcon {
+  animation-play-state: paused;
+  box-shadow: none;
+  filter: none;
+}
+
+.horizontalFeature:hover .featureTitle,
+.horizontalFeature:focus-visible .featureTitle,
+.horizontalFeature:focus-within .featureTitle,
+.horizontalFeature:active .featureTitle {
+  color: var(--sf-primary);
+  text-shadow: 0 0 13px color-mix(in srgb, var(--sf-primary) 32%, transparent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .featureIcon {
+    animation: none;
+    box-shadow: 0 0 14px color-mix(in srgb, var(--sf-primary) 28%, transparent);
+  }
+  .horizontalFeature:hover .featureIcon,
+  .horizontalFeature:focus-visible .featureIcon,
+  .horizontalFeature:focus-within .featureIcon,
+  .horizontalFeature:active .featureIcon {
+    box-shadow: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none; }
+}
+
+
+/* Impact tiles share a stable, compact row footprint on small phones. */
+@media (max-width: 420px) {
+  .horizontalFeature {
+    min-height: 60px;
+    height: 100%;
+    animation: none;
+  }
+  .horizontalFeature .horizontalContent {
+    justify-content: center;
+    padding: 10px 12px;
+    gap: 0;
+  }
+  .horizontalFeature .featureRow {
+    grid-template-columns: 36px minmax(0, 1fr);
+    gap: 10px;
+  }
+  .horizontalFeature .featureIcon {
+    width: 36px;
+    max-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    aspect-ratio: auto;
+    animation: none;
+    box-shadow: none;
+  }
+  .horizontalFeature .featureIcon svg {
+    width: 20px;
+    height: 20px;
+  }
+  .horizontalFeature .featureTitle {
+    font-size: 13px;
+    line-height: 1.3;
+  }
+}
+
+
+/* Photo-rich impact cards remain compact on phones. */
+@media (max-width: 700px) {
+  .horizontalFeature .media { display: none; }
+}
+
+
+/* Impact programme tiles use the bundled project SVGs as small glowing glyphs,
+   not as card photos. Keep the title aligned even on wide desktop cards. */
+.iconOnly { min-height: 0; }
+.iconOnly .media { display: none !important; }
+.iconOnly .content { padding: clamp(13px, 2.6cqi, 19px); }
+.iconOnly .icon { width: 44px; min-width: 44px; height: 44px; margin: 0; padding: 6px; animation: featureIconGlow 2.5s ease-in-out infinite; }
+.iconOnly .icon img { display: block; width: 30px; height: 30px; object-fit: contain; }
+.iconOnly.horizontalFeature .featureRow { grid-template-columns: 44px minmax(0, 1fr); gap: 12px; }
+.iconOnly .featureIcon {
+  display: grid; place-items: center;
+  width: 44px; min-width: 44px; max-width: 44px;
+  height: 44px; min-height: 44px; aspect-ratio: auto;
+  padding: 6px; margin: 0;
+  border-color: color-mix(in srgb, var(--sf-primary) 34%, var(--sf-border));
+  background: color-mix(in srgb, var(--sf-primary) 7%, var(--sf-card));
+  animation: featureIconGlow 2.5s ease-in-out infinite;
+}
+.featureSvgIcon img { display: block; width: 30px; height: 30px; object-fit: contain; }
+.iconOnly .featureTitle { font-size: clamp(14px, 1.25vw, 17px); line-height: 1.3; }
+.iconOnly .body { display: block; font-size: 12px; line-height: 1.55; color: var(--sf-muted); margin-top: 7px; }
+.iconOnly .more { display: none; }
+@media (max-width: 700px) {
+  .iconOnly.horizontalFeature .featureRow { grid-template-columns: 34px minmax(0, 1fr); gap: 9px; }
+  .iconOnly .featureIcon { width: 34px; min-width: 34px; max-width: 34px; height: 34px; min-height: 34px; padding: 5px; animation: none; box-shadow: none; }
+  .iconOnly .featureIcon img, .iconOnly .icon img { width: 24px; height: 24px; }
+  .iconOnly .icon { width: 34px; min-width: 34px; height: 34px; padding: 5px; animation: none; box-shadow: none; }
+  .iconOnly .featureTitle { font-size: 13px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .iconOnly .icon { animation: none; box-shadow: 0 0 10px color-mix(in srgb, var(--sf-primary) 20%, transparent); }
+}
+
+
+/* Keep impact cards deliberately title-only on phones, regardless of global legacy card rules. */
+@media (max-width: 700px) {
+  .mobileTitleOnly .body,
+  .mobileTitleOnly .more,
+  .iconOnly .body,
+  .iconOnly .more { display: none !important; }
+}
