@@ -16,8 +16,8 @@ import {
   Send,
   Users,
 } from 'lucide-react'
-import { Button } from '@/app/components/ui/button'
-import { Badge } from '@/app/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { SectionToolbar, PageLoading } from '../_components/AdminCommon'
 import { getDashboard, getRecentDonations, getRecentSubmissions, setSubmissionStatus } from '@/lib/api/dashboard'
 

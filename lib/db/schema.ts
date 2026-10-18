@@ -7,6 +7,7 @@ export const mediaItems = pgTable('media_items', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),
   src: text('src').notNull(),
   storageKey: text('storage_key'),
+  storageBucket: text('storage_bucket').notNull().default('uploads'),
   contentType: varchar('content_type', { length: 120 }),
   sizeBytes: bigint('size_bytes', { mode: 'number' }),
   isPublic: boolean('is_public').notNull().default(false),

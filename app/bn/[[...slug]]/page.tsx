@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
-import ContentPage from '../../components/ContentPage'
+import ContentPage from '@/components/pages/ContentPage'
 import { getCmsMenuIndex, getPublicSiteSnapshot, resolvePagePath } from '@/lib/site'
 
 export const dynamic = 'force-dynamic'

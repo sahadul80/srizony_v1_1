@@ -1762,7 +1762,7 @@ html[data-mode="dark"] .brand strong{color:var(--sf-link)}
 
 /* ---------- SDG diagram ---------- */
 
-.sf-diagram-sdg-marquee{
+.sf-diagram-sdg-rail{
   overflow-x:auto;
   padding:4px 2px 12px;
   scrollbar-width:thin;
@@ -1791,10 +1791,6 @@ html[data-mode="dark"] .brand strong{color:var(--sf-link)}
   box-shadow:var(--sf-shadow-soft);
 }
 
-.sf-diagram-sdg-card.is-duplicate{
-  visibility:hidden;
-  pointer-events:none;
-}
 
 .sf-diagram-sdg-icon{
   display:grid;
@@ -1837,32 +1833,6 @@ html[data-mode="dark"] .brand strong{color:var(--sf-link)}
   line-height:1.65;
 }
 
-.sf-diagram-controls{
-  display:flex;
-  justify-content:flex-end;
-  margin-top:4px;
-}
-
-.sf-diagram-pause{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:6px;
-  min-height:34px;
-  padding:7px 11px;
-  color:var(--sf-ink);
-  background:var(--sf-card);
-  border:1px solid var(--sf-border);
-  border-radius:10px;
-  font-size:11px;
-  font-weight:800;
-}
-
-.sf-diagram-pause:hover{
-  color:var(--sf-primary);
-  background:var(--sf-soft);
-  border-color:var(--sf-primary);
-}
 
 /* ---------- timeline ---------- */
 

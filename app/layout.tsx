@@ -1,18 +1,21 @@
 import type { Metadata, Viewport } from 'next'
-import { Inter, Noto_Sans_Bengali } from 'next/font/google'
+import { Inter, Noto_Sans_Bengali, Poppins } from 'next/font/google'
 import type { ReactNode } from 'react'
 import './globals.css'
-import ToastProvider from './components/ToastProvider'
+import './site-components.css'
+import './site-polish.css'
+import ToastProvider from '@/components/ui/ToastProvider'
 import { images, systemData } from '../data/data'
 import Link from 'next/link'
 import { cookies } from 'next/headers'
-import AppShell from './components/AppShell'
+import AppShell from '@/components/containers/AppShell'
 import { headers } from 'next/headers'
 import { getPublicSiteSnapshot } from '@/lib/site'
 
 const siteUrl = 'https://srizonyfoundation.org.bd'
 
 const bodyFont = Inter({ subsets: ['latin'], variable: '--font-body', display: 'swap' })
+const displayFont = Poppins({ subsets: ['latin'], weight: ['500', '600', '700'], variable: '--font-display', display: 'swap' })
 const banglaFont = Noto_Sans_Bengali({ subsets: ['bengali'], variable: '--font-bengali', display: 'swap' })
 
 export const metadata: Metadata = {
@@ -49,5 +52,5 @@ export default async function RootLayout({children}:{children:ReactNode}){
   const organizationLd = {
     '@context':'https://schema.org', '@type':'Organization', name:'Srizony Foundation', alternateName:'সৃজনী ফাউন্ডেশন', url:siteUrl, logo:`${siteUrl}${images.logo}`, foundingDate:'1985', email:'info@srizonyfoundation.org.bd', telephone:systemData.contactInfo?.primaryPhone || '+8802477747270', sameAs:[systemData.contactInfo?.socials?.linkedin].filter(Boolean)
   }
-  return <html lang={initialLang} className={`${bodyFont.variable} ${banglaFont.variable}`} data-scroll-behavior="smooth" data-theme={theme} data-mode={mode} data-shape={shape}><body><ToastProvider/><Link className="skip-link" href="#main-content">Skip to content</Link><AppShell initialPreferences={{theme: theme as any, mode: mode as any, shape: shape as any}} initialSite={initialSite} initialLang={initialLang}>{children}</AppShell><script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(organizationLd)}}/></body></html>
+  return <html lang={initialLang} className={`${bodyFont.variable} ${displayFont.variable} ${banglaFont.variable}`} data-scroll-behavior="smooth" data-theme={theme} data-mode={mode} data-shape={shape}><body><ToastProvider/><Link className="skip-link" href="#main-content">Skip to content</Link><AppShell initialPreferences={{theme: theme as any, mode: mode as any, shape: shape as any}} initialSite={initialSite} initialLang={initialLang}>{children}</AppShell><script type="application/ld+json" dangerouslySetInnerHTML={{__html:JSON.stringify(organizationLd)}}/></body></html>
 }

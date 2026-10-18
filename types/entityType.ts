@@ -17,10 +17,20 @@ export type MediaItem = {
   hoverSrc?: string
 }
 
+export type SectionButtonConfig = {
+  visible: boolean
+  mode: 'primary' | 'secondary' | 'both'
+  label: Bilingual
+  secondaryLabel?: Bilingual
+  href: string
+  secondaryHref?: string
+  action?: 'route' | 'external' | 'anchor'
+  secondaryAction?: 'route' | 'external' | 'anchor'
+}
 export type Section =
   | { type: 'richText'; eyebrow?: Bilingual; heading?: Bilingual; body: Bilingual[]; image?: MediaItem; reverse?: boolean }
-  | { type: 'stats'; items: { value: string; label: Bilingual; note?: Bilingual }[] }
-  | { type: 'cards'; eyebrow?: Bilingual; heading?: Bilingual; variant?: 'default' | 'impact'; items: { title: Bilingual; body?: Bilingual; icon?: IconName; image?: MediaItem; illustration?: IllustrationName; href?: string; tag?: Bilingual }[]; columns?: 2 | 3 | 4 }
+  | { type: 'stats'; eyebrow?: Bilingual; heading?: Bilingual; introBody?: Bilingual; illustrationYear?: string; items: { value: string; label: Bilingual; note?: Bilingual; icon?: IconName | 'home' }[] }
+  | { type: 'cards'; eyebrow?: Bilingual; heading?: Bilingual; variant?: 'default' | 'impact'; dataSource?: 'manual' | 'published-feed'; items: { title: Bilingual; body?: Bilingual; icon?: IconName | 'sprout' | 'store'; image?: MediaItem; illustration?: 'heart' | 'book' | 'users' | 'coins' | 'sprout' | 'store'; href?: string; tag?: Bilingual; chips?: Bilingual[] }[]; columns?: 2 | 3 | 4 }
   | { type: 'gallery'; heading?: Bilingual; items: MediaItem[]; columns?: 2 | 3 | 4 }
   | { type: 'timeline'; heading?: Bilingual; variant?: 'list' | 'journey'; items: { year: string; title: Bilingual; body: Bilingual; details?: Bilingual[] }[] }
   | { type: 'diagram'; heading?: Bilingual; body?: Bilingual; variant: 'sdg' | 'impact' | 'governance' }
@@ -30,28 +40,32 @@ export type Section =
   | { type: 'noticeList'; heading?: Bilingual; autoplay?: boolean; items: { date: string; title: Bilingual; body?: Bilingual; href?: string }[] }
   | { type: 'contact'; heading?: Bilingual; address: Bilingual; phones: string[]; emails: string[]; mapLabel?: Bilingual; locations?: { name: Bilingual; address: Bilingual; mapQuery: string; phone?: string; email?: string; kind?: 'site' | 'branch' | 'footprint' }[] }
   | { type: 'donation'; heading?: Bilingual; body?: Bilingual }
-  | { type: 'carousel'; eyebrow?: Bilingual; heading?: Bilingual; body?: Bilingual; presentation?: 'collection' | 'scroller'; collectionKind?: 'projects' | 'news'; items: { title: Bilingual; body?: Bilingual; image: MediaItem; href?: string; tag?: Bilingual }[] }
+  | { type: 'carousel'; eyebrow?: Bilingual; heading?: Bilingual; body?: Bilingual; presentation?: 'collection' | 'scroller'; collectionKind?: 'projects' | 'news'; dataSource?: 'manual' | 'published-news'; items: { title: Bilingual; body?: Bilingual; image: MediaItem; href?: string; tag?: Bilingual }[] }
   | { type: 'contentFeed'; heading?: Bilingual; components: ContentComponent[]; items: FeedItem[] }
   | { type: 'reports'; eyebrow?: Bilingual; heading?: Bilingual; body?: Bilingual; items: { title: Bilingual; description?: Bilingual; file?: string; publishedAt?: string; category?: Bilingual }[] }
 
 
 export type HeroStat = { id: string; icon: 'heart' | 'users' | 'building' | 'location'; value: Bilingual; label: Bilingual }
-export type HeroSlide = { id: string; image: string; title: Bilingual; description: Bilingual; href: string }
-export type HeroData = { eyebrow: Bilingual; headingLineOne: Bilingual; headingLineTwo: Bilingual; description: Bilingual; primaryAction: { label: Bilingual; href: string }; secondaryAction: { label: Bilingual; href: string }; slides: HeroSlide[]; stats: HeroStat[]; autoplay?: boolean; autoplayInterval?: number; videoHref?: string }
+export type HeroSlide = { id: string; image: string; title: Bilingual; description: Bilingual; href: string; alt?: Bilingual }
+export type HeroData = { eyebrow: Bilingual; headingLineOne: Bilingual; headingLineTwo: Bilingual; description: Bilingual; primaryAction: { label: Bilingual; href: string }; secondaryAction: { label: Bilingual; href: string }; slides: HeroSlide[]; stats: HeroStat[]; autoplay?: boolean; autoplayInterval?: number; videoHref?: string; copyVisible?: boolean; copyRemoved?: boolean }
+
+export type LandingComponentKey = 'hero' | 'growth' | 'missionVisionValues' | 'locations' | 'developmentAreas' | 'stories' | 'donate'
+export type PageSection = Section & { visible?: boolean; buttonConfig?: SectionButtonConfig; homeComponent?: LandingComponentKey }
 
 export type PageData = {
   slug: string
+  layout?: 'standard' | 'wide' | 'narrow' | 'editorial'
   title: Bilingual
   subtitle?: Bilingual
   heroImage?: string
   heroTone?: 'green' | 'light' | 'orange'
-  sections: Section[]
+  sections: PageSection[]
   metaDescription?: Bilingual
   status?: 'draft' | 'published' | 'archived'
   sortOrder?: number
 }
 
-export type NavItem = { label: Bilingual; href: string; featured?: boolean; children?: NavItem[] }
+export type NavItem = { label: Bilingual; href: string; featured?: boolean; menuType?: 'page' | 'external'; renderedComponents?: Section['type'][]; children?: NavItem[] }
 export type NavGroup = { label: Bilingual; items: NavItem[] }
 
 export type ColorMode = 'light' | 'dark'

@@ -2,14 +2,14 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react'
 import { CirclePlus } from 'lucide-react'
-import { Badge } from '@/app/components/ui/badge'
-import { Button } from '@/app/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { listContent } from '@/lib/api/siteContent'
 import { COMPONENTS, type ContentComponent, type ContentRecord } from '@/lib/cms/components'
 import { AdminErrorState, PageLoading, SectionToolbar, useAdminFetch } from '../_components/AdminCommon'
 import { ContentEditor } from '../_components/ContentEditor'
 
-const MANAGED: ContentComponent[] = ['project', 'product', 'team', 'notice', 'report']
+const MANAGED: ContentComponent[] = ['project', 'news', 'enterprise', 'partner-agency', 'health-service', 'loan-product', 'notice', 'product', 'team', 'report', 'job', 'success-story']
 
 export default function SiteContentPage() {
   const [component, setComponent] = useState<ContentComponent>('project')

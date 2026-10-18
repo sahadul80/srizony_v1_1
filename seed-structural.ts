@@ -1,6 +1,8 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { allPages, contentEntries, themes, homeHero, navGroups, primaryNav, ui, contactInfo, SDGsteps, donationInfo, systemData, openImageUrlForPath, imageForSlug } from '@/data/data'
+import { ensureCmsSchema } from '@/lib/cms/ensureSchema'
+import { allPages, contentEntries, contentDetails, themes, homeHero, navGroups, primaryNav, ui, contactInfo, SDGsteps, donationInfo, systemData, openImageUrlForPath, imageForSlug } from '@/data/data'
+import { validateContentDetailsDataset } from '@/data/contentDetails'
 
 const database = db
 if (!database) { throw new Error('DATABASE_URL is not configured. Set DATABASE_URL in .env.local before running database commands.') }
@@ -460,7 +462,7 @@ async function seedPage(page: any, mediaCache: Map<string, number>) {
       for(let j=0;j<(section.items??[]).length;j++){const x=section.items[j];await database!.execute(sql`INSERT INTO stat_items(section_id,value,label_en,label_bn,note_en,note_bn,sort_order) VALUES(${sectionId},${x.value},${x.label.en},${x.label.bn},${x.note?.en??null},${x.note?.bn??null},${j})`)}
     } else if(section.type==='cards'){
       await database!.execute(sql`INSERT INTO cards_sections(section_id,eyebrow_en,eyebrow_bn,heading_en,heading_bn,columns) VALUES(${sectionId},${section.eyebrow?.en??null},${section.eyebrow?.bn??null},${section.heading?.en??null},${section.heading?.bn??null},${section.columns??null})`)
-      for(let j=0;j<(section.items??[]).length;j++){const x=section.items[j];const imageId=await insertMedia(x.image,mediaCache);await database!.execute(sql`INSERT INTO card_items(section_id,title_en,title_bn,body_en,body_bn,icon,image_id,illustration,href,tag_en,tag_bn,sort_order) VALUES(${sectionId},${x.title.en},${x.title.bn},${x.body.en},${x.body.bn},${x.icon??null},${imageId},${x.illustration??null},${x.href??null},${x.tag?.en??null},${x.tag?.bn??null},${j})`)}
+      for(let j=0;j<(section.items??[]).length;j++){const x=section.items[j];const imageId=await insertMedia(x.image,mediaCache);await database!.execute(sql`INSERT INTO card_items(section_id,title_en,title_bn,body_en,body_bn,icon,image_id,illustration,href,tag_en,tag_bn,sort_order) VALUES(${sectionId},${x.title.en},${x.title.bn},${x.body?.en??null},${x.body?.bn??null},${x.icon??null},${imageId},${x.illustration??null},${x.href??null},${x.tag?.en??null},${x.tag?.bn??null},${j})`)}
     } else if(section.type==='gallery'){
       await database!.execute(sql`INSERT INTO gallery_sections(section_id,heading_en,heading_bn,columns) VALUES(${sectionId},${section.heading?.en??null},${section.heading?.bn??null},${section.columns??null})`)
       for(let j=0;j<(section.items??[]).length;j++){const imageId=await insertMedia(section.items[j],mediaCache);if(imageId)await database!.execute(sql`INSERT INTO gallery_items(section_id,media_id,sort_order) VALUES(${sectionId},${imageId},${j})`)}
@@ -479,7 +481,7 @@ async function seedPage(page: any, mediaCache: Map<string, number>) {
       await database!.execute(sql`INSERT INTO cta_sections(section_id,heading_en,heading_bn,body_en,body_bn,primary_label_en,primary_label_bn,primary_href,secondary_label_en,secondary_label_bn,secondary_href) VALUES(${sectionId},${section.heading.en},${section.heading.bn},${section.body.en},${section.body.bn},${section.primary.label.en},${section.primary.label.bn},${section.primary.href},${section.secondary?.label?.en??null},${section.secondary?.label?.bn??null},${section.secondary?.href??null})`)
     } else if(section.type==='noticeList'){
       await database!.execute(sql`INSERT INTO notice_list_sections(section_id,heading_en,heading_bn) VALUES(${sectionId},${section.heading?.en??null},${section.heading?.bn??null})`)
-      for(let j=0;j<(section.items??[]).length;j++){const x=section.items[j];await database!.execute(sql`INSERT INTO notice_items(section_id,date_value,title_en,title_bn,body_en,body_bn,href,sort_order) VALUES(${sectionId},${x.date},${x.title.en},${x.title.bn},${x.body.en},${x.body.bn},${x.href??null},${j})`)}
+      for(let j=0;j<(section.items??[]).length;j++){const x=section.items[j];await database!.execute(sql`INSERT INTO notice_items(section_id,date_value,title_en,title_bn,body_en,body_bn,href,sort_order) VALUES(${sectionId},${x.date},${x.title.en},${x.title.bn},${x.body?.en??null},${x.body?.bn??null},${x.href??null},${j})`)}
     } else if(section.type==='contact'){
       await database!.execute(sql`INSERT INTO contact_sections(section_id,heading_en,heading_bn,address_en,address_bn,phones,emails,map_label_en,map_label_bn) VALUES(${sectionId},${section.heading?.en??null},${section.heading?.bn??null},${section.address.en},${section.address.bn},${textArray(section.phones)},${textArray(section.emails)},${section.mapLabel?.en??null},${section.mapLabel?.bn??null})`)
       for(let j=0;j<(section.locations??[]).length;j++){const x=section.locations[j];await database!.execute(sql`INSERT INTO contact_locations(section_id,name_en,name_bn,address_en,address_bn,map_query,phone,email,kind,sort_order) VALUES(${sectionId},${x.name.en},${x.name.bn},${x.address.en},${x.address.bn},${x.mapQuery},${x.phone??null},${x.email??null},${x.kind??null},${j})`)}
@@ -565,82 +567,57 @@ async function ensureGroup(key: string, labelEn: string, labelBn: string, sort: 
 }
 
 async function seedCmsContentItems() {
-  const legacyComponent = (category: string): 'project' | 'product' | 'notice' | 'job' | null => {
-    if (category === 'enterprise') return 'product'
-    if (category === 'career') return 'job'
-    if (category === 'notice') return 'notice'
-    if (category === 'project' || category === 'news') return 'project'
-    return null
-  }
-  for (const entry of contentEntries as any[]) {
-    const component = legacyComponent(String(entry.category))
-    if (!component) continue
-    const isFieldNews = entry.category === 'news'
-    const imageUrl = entry.image?.src ? openImageUrlForPath(String(entry.image.src)) : null
-    const bodyEn = (entry.body || []).map((paragraph: any) => paragraph.en).filter(Boolean).join('\n\n')
-    const bodyBn = (entry.body || []).map((paragraph: any) => paragraph.bn).filter(Boolean).join('\n\n')
-    const attributes = {
-      ...(component === 'project' ? { projectStatus: 'Ongoing', location_en: 'Jhenaidah, Bangladesh', location_bn: 'ঝিনাইদহ, বাংলাদেশ' } : {}),
-      ...(isFieldNews ? { fieldNews: true, seedSample: true } : {}),
-      ...(component === 'product' ? { category_en: 'Srizony Enterprise', category_bn: 'সৃজনী উদ্যোগ' } : {}),
-      ...(component === 'job' && entry.deadline ? { deadline: String(entry.deadline) } : {}),
-    }
+  // Canonical contentDetails rows repair legacy-imported seed records once. After the
+  // seedSource marker is present, later seed runs preserve CMS edits and publication status.
+  for (const entry of contentDetails as any[]) {
+    const attributes = { ...(entry.attributes || {}), seedSource: 'contentDetails-v1' }
     await database!.execute(sql`
       INSERT INTO cms_content_items
         (component,slug,title_en,title_bn,summary_en,summary_bn,body_en,body_bn,image_src,published_at,status,attributes,sort_order)
       VALUES
-        (${component},${String(entry.slug)},${String(entry.title.en)},${String(entry.title.bn || entry.title.en)},
-         ${String(entry.excerpt?.en || '')},${String(entry.excerpt?.bn || '')},${bodyEn},${bodyBn},${imageUrl},
-         ${normalizeSeedDate(entry.date)}::date,'published',${JSON.stringify(attributes)}::jsonb,${Number(entry.sortOrder || 0)})
-      ON CONFLICT (component,slug) ${isFieldNews
-        ? sql`DO UPDATE SET
-            attributes = cms_content_items.attributes || EXCLUDED.attributes,
-            image_src = COALESCE(cms_content_items.image_src, EXCLUDED.image_src),
-            updated_at = now()`
-        : sql`DO NOTHING`}
+        (${String(entry.component)},${String(entry.slug)},${String(entry.title_en)},${String(entry.title_bn)},
+         ${String(entry.summary_en || '')},${String(entry.summary_bn || '')},${String(entry.body_en || '')},${String(entry.body_bn || '')},
+         ${entry.image_src ? openImageUrlForPath(String(entry.image_src)) : null},${normalizeSeedDate(entry.published_at)}::date,
+         ${String(entry.status || 'published')},${JSON.stringify(attributes)}::jsonb,${Number(entry.sort_order || 0)})
+      ON CONFLICT (component,slug) DO UPDATE SET
+        title_en=EXCLUDED.title_en, title_bn=EXCLUDED.title_bn,
+        summary_en=EXCLUDED.summary_en, summary_bn=EXCLUDED.summary_bn,
+        body_en=EXCLUDED.body_en, body_bn=EXCLUDED.body_bn, image_src=EXCLUDED.image_src,
+        published_at=EXCLUDED.published_at, status=EXCLUDED.status,
+        attributes=cms_content_items.attributes || EXCLUDED.attributes,
+        sort_order=EXCLUDED.sort_order, updated_at=now()
+      WHERE cms_content_items.attributes->>'seedSource' IS DISTINCT FROM 'contentDetails-v1'
     `)
   }
 
-  // Extra examples are available for editors in the CMS as drafts. They do not
-  // make fictional events appear on the public site before an editor reviews them.
-  const extraSamples = [
-    { slug: 'sample-community-health-outreach', en: 'Community Health Outreach', bn: 'কমিউনিটি স্বাস্থ্যসেবা', summaryEn: 'Sample CMS record for community health activities.', summaryBn: 'কমিউনিটি স্বাস্থ্য কার্যক্রমের জন্য নমুনা CMS রেকর্ড।', img: 'health' },
-    { slug: 'sample-learning-and-skills', en: 'Learning and Skills Support', bn: 'শিক্ষা ও দক্ষতা সহায়তা', summaryEn: 'Sample CMS record for education and skills programmes.', summaryBn: 'শিক্ষা ও দক্ষতা কর্মসূচির জন্য নমুনা CMS রেকর্ড।', img: 'education' },
-    { slug: 'sample-rural-livelihoods', en: 'Rural Livelihoods and Agriculture', bn: 'গ্রামীণ জীবিকা ও কৃষি', summaryEn: 'Sample CMS record for agriculture and income-generating support.', summaryBn: 'কৃষি ও আয়বর্ধক সহায়তার জন্য নমুনা CMS রেকর্ড।', img: 'agriculture' },
-    { slug: 'sample-community-rights', en: 'Community Rights and Participation', bn: 'কমিউনিটির অধিকার ও অংশগ্রহণ', summaryEn: 'Sample CMS record for rights awareness and community participation.', summaryBn: 'অধিকার সচেতনতা ও কমিউনিটির অংশগ্রহণের জন্য নমুনা CMS রেকর্ড।', img: 'rights' },
-    { slug: 'sample-climate-resilience', en: 'Climate Resilience and Local Action', bn: 'জলবায়ু সহনশীলতা ও স্থানীয় উদ্যোগ', summaryEn: 'Sample CMS record for environmental awareness and adaptation.', summaryBn: 'পরিবেশ সচেতনতা ও অভিযোজনের জন্য নমুনা CMS রেকর্ড।', img: 'climate' },
-    { slug: 'sample-community-partnership', en: 'Community Partnership Update', bn: 'কমিউনিটি অংশীদারিত্ব আপডেট', summaryEn: 'Sample CMS record to demonstrate a community partnership story.', summaryBn: 'কমিউনিটি অংশীদারিত্বের গল্প দেখানোর জন্য নমুনা CMS রেকর্ড।', img: 'community' },
-    { slug: 'sample-women-enterprise', en: 'Women-led Enterprise Support', bn: 'নারী নেতৃত্বাধীন উদ্যোগ সহায়তা', summaryEn: 'Sample CMS record for women-led small enterprise support.', summaryBn: 'নারী নেতৃত্বাধীন ক্ষুদ্র উদ্যোগ সহায়তার জন্য নমুনা CMS রেকর্ড।', img: 'farming' },
-    { slug: 'sample-digital-inclusion', en: 'Digital Inclusion and Skills', bn: 'ডিজিটাল অন্তর্ভুক্তি ও দক্ষতা', summaryEn: 'Sample CMS record for technology and digital skills support.', summaryBn: 'প্রযুক্তি ও ডিজিটাল দক্ষতা সহায়তার জন্য নমুনা CMS রেকর্ড।', img: 'digital' },
-  ]
-  const photoMap: Record<string, string> = {
-    health: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1600&q=85',
-    education: 'https://images.unsplash.com/photo-1777725770744-e66b802dbf60?auto=format&fit=crop&w=1600&q=85',
-    agriculture: 'https://images.unsplash.com/photo-1761961851508-43db0337480a?auto=format&fit=crop&w=1600&q=85',
-    rights: 'https://images.unsplash.com/photo-1722932592507-59b3a3ac368d?auto=format&fit=crop&w=1600&q=85',
-    climate: 'https://images.unsplash.com/photo-1668940004859-c3b8249e8067?auto=format&fit=crop&w=1600&q=85',
-    community: 'https://images.unsplash.com/photo-1766858669684-4e501b3b9f9f?auto=format&fit=crop&w=1600&q=85',
-    farming: 'https://images.unsplash.com/photo-1738233505102-1bd26c33679e?auto=format&fit=crop&w=1600&q=85',
-    digital: 'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1600&q=85',
-  }
-  for (let i = 0; i < extraSamples.length; i++) {
-    const sample = extraSamples[i]
-    const attrs = { fieldNews: true, seedSample: true, projectStatus: 'Ongoing', location_en: 'Jhenaidah, Bangladesh', location_bn: 'ঝিনাইদহ, বাংলাদেশ' }
+  // Keep support for any separately-authored career entries in the older catalogue.
+  // The four legacy collections are not authoritative for CMS seeding any more.
+  for (const entry of contentEntries as any[]) {
+    if (String(entry.category) !== 'career') continue
+    const bodyEn = (entry.body || []).map((paragraph: any) => paragraph.en).filter(Boolean).join('\n\n')
+    const bodyBn = (entry.body || []).map((paragraph: any) => paragraph.bn).filter(Boolean).join('\n\n')
+    const imageUrl = entry.image?.src ? openImageUrlForPath(String(entry.image.src)) : null
+    const attributes = { ...(entry.deadline ? { deadline: String(entry.deadline) } : {}), detailPath: `/job-circular/${entry.slug}` }
     await database!.execute(sql`
       INSERT INTO cms_content_items
         (component,slug,title_en,title_bn,summary_en,summary_bn,body_en,body_bn,image_src,published_at,status,attributes,sort_order)
-      VALUES
-        ('project',${sample.slug},${sample.en},${sample.bn},${sample.summaryEn},${sample.summaryBn},
-         ${`${sample.summaryEn} This is a draft sample. Replace it with a verified field report before publishing.`},
-         ${`${sample.summaryBn} এটি খসড়া নমুনা। প্রকাশের আগে যাচাইকৃত মাঠপর্যায়ের প্রতিবেদন দিয়ে প্রতিস্থাপন করুন।`},
-         ${photoMap[sample.img]},${`2026-${String(10 - (i % 8)).padStart(2,'0')}-01`}::date,'draft',${JSON.stringify(attrs)}::jsonb,${100 + i})
+      VALUES ('job',${String(entry.slug)},${String(entry.title.en)},${String(entry.title.bn || entry.title.en)},
+        ${String(entry.excerpt?.en || '')},${String(entry.excerpt?.bn || '')},${bodyEn},${bodyBn},${imageUrl},
+        ${normalizeSeedDate(entry.date)}::date,'published',${JSON.stringify(attributes)}::jsonb,${Number(entry.sortOrder || 0)})
       ON CONFLICT (component,slug) DO NOTHING
     `)
   }
 }
 
 async function main() {
+  const catalogue = validateContentDetailsDataset()
+  for (const [slug, page] of Object.entries(allPages)) {
+    if (!page.title?.en?.trim() || !page.title?.bn?.trim()) throw new Error(`Page ${slug} is missing a bilingual title.`)
+    if (!Array.isArray(page.sections)) throw new Error(`Page ${slug} must define its sections as an array.`)
+  }
+  console.log(`Validated canonical CMS dataset: ${catalogue.total} bilingual catalogue records across ${Object.keys(catalogue.counts).length} content types and ${Object.keys(allPages).length} page routes.`)
   await ensureSeedSchema()
+  await ensureCmsSchema()
   if (RESET_SEED) {
     console.warn('SEED RESET MODE: clearing seeded page/config/legacy content tables. CMS items and job applications are preserved.')
     await database!.execute(sql`TRUNCATE pages RESTART IDENTITY CASCADE`)

@@ -4,7 +4,7 @@ import { getAdminSession, hasAdminRole } from '@/lib/adminAuth'
 import { getCmsEditorData, saveDocument } from '@/lib/site'
 import { auditAdminAction } from '@/lib/security'
 
-const slugSchema = z.string().regex(/^\/.+/)
+const slugSchema = z.string().regex(/^\/(?:[a-z0-9]+(?:-[a-z0-9]+)*(?:\/[a-z0-9]+(?:-[a-z0-9]+)*)*)?$/)
 const pageSchema = z.object({ scope: z.literal('page'), slug: slugSchema, data: z.record(z.string(), z.unknown()), expectedUpdatedAt: z.string().datetime().optional() })
 const globalSchema = z.object({ scope: z.literal('global'), data: z.record(z.string(), z.unknown()), expectedUpdatedAt: z.string().datetime().optional() })
 
@@ -22,16 +22,26 @@ export async function GET(req: Request) {
   return NextResponse.json({ ok: false, error: { code: 'INVALID_REQUEST', message: 'Use /api/admin/content/index for the CMS index.' } }, { status: 400 })
 }
 
-function containsEmbeddedMedia(value: unknown, key = ''): boolean {
+/**
+ * Embedded data/blob media cannot be saved as CMS content; uploaded media must
+ * use a URL returned by the media API. Ordinary HTTPS URLs are intentionally
+ * allowed because existing remote assets are supported by the CMS editor.
+ * Return paths so editors can locate the offending field without parsing JSON.
+ */
+function findEmbeddedMediaPaths(value: unknown, path = 'body'): string[] {
   if (typeof value === 'string') {
-    if (value.startsWith('data:') || value.startsWith('blob:')) return true
-    const mediaKey = /^(src|image|heroimage|poster|file|hoverSrc|download|attachment)$/i.test(key)
-    if (mediaKey && /^https?:\/\//i.test(value)) return true
-    return false
+    // Detect media data URLs even when embedded inside HTML, plus object URLs.
+    // Do not reject normal https:// URLs or local /api/media/... URLs.
+    const embeddedMedia = /(?:^|[\s"'(=])(?:data:(?:image|video|audio)\/[^,]*,|data:application\/(?:pdf|octet-stream)[^,]*,|data:[^,;]+;base64,|blob:)[^\s"'<>)]*/i
+    return embeddedMedia.test(value) ? [path] : []
   }
-  if (Array.isArray(value)) return value.some((item) => containsEmbeddedMedia(item, key))
-  if (value && typeof value === 'object') return Object.entries(value).some(([childKey, child]) => containsEmbeddedMedia(child, childKey))
-  return false
+  if (Array.isArray(value)) {
+    return value.flatMap((item, index) => findEmbeddedMediaPaths(item, `${path}[${index}]`))
+  }
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([childKey, child]) => findEmbeddedMediaPaths(child, `${path}.${childKey}`))
+  }
+  return []
 }
 
 export async function PUT(req: Request) {
@@ -39,8 +49,18 @@ export async function PUT(req: Request) {
   if (!admin) return NextResponse.json({ ok: false, error: { code: 'UNAUTHORIZED', message: 'Unauthorized.' } }, { status: 401 })
   if (!hasAdminRole(admin, 'admin', 'editor')) return NextResponse.json({ ok: false, error: { code: 'FORBIDDEN', message: 'Editor permission required.' } }, { status: 403 })
   const body = await req.json().catch(() => null)
-  if (containsEmbeddedMedia(body)) {
-    return NextResponse.json({ ok: false, error: { code: 'MEDIA_UPLOAD_REQUIRED', message: 'Embedded Base64/blob media is not accepted. Upload files through the CMS media library first.' } }, { status: 400 })
+  const embeddedMediaPaths = findEmbeddedMediaPaths(body)
+  if (embeddedMediaPaths.length) {
+    const affectedFields = embeddedMediaPaths.slice(0, 5).join(', ')
+    const extra = embeddedMediaPaths.length > 5 ? ` and ${embeddedMediaPaths.length - 5} more` : ''
+    return NextResponse.json({
+      ok: false,
+      error: {
+        code: 'MEDIA_UPLOAD_REQUIRED',
+        message: `Embedded Base64/blob media is not accepted (${affectedFields}${extra}). Upload the file through the CMS Media Library and use its returned media URL. Ordinary HTTPS and /api/media/... URLs are supported.`,
+        fields: embeddedMediaPaths,
+      },
+    }, { status: 400 })
   }
 
   const pageResult = pageSchema.safeParse(body)

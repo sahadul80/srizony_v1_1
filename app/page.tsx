@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import ContentPage from './components/ContentPage'
+import ContentPage from '@/components/pages/ContentPage'
 import { getPublicSiteSnapshot } from '@/lib/site'
 
 export const dynamic = 'force-dynamic'

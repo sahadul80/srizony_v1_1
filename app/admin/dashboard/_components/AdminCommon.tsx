@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { Button } from '@/app/components/ui/button'
+import { Button } from '@/components/ui/button'
 
 /** Runs an async loader from /lib/api and tracks loading/error state. `deps` re-triggers the load. */
 export function useAdminFetch<T>(loader: () => Promise<T>, deps: unknown[] = []) {

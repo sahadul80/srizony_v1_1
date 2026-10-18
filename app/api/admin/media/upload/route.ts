@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
+import { eq } from 'drizzle-orm'
 import { getAdminSession, hasAdminRole } from '@/lib/adminAuth'
 import { db } from '@/lib/db'
 import { mediaItems } from '@/lib/db/schema'
-import { deleteObject, uploadObject, sanitizeFileName } from '@/lib/storage'
+import { deleteObject, uploadObject, sanitizeFileName, getPrivateStorageBucket, getPublicAssetsBucket, getPublicObjectUrl } from '@/lib/storage'
 import { auditAdminAction } from '@/lib/security'
 
 export const runtime = 'nodejs'
@@ -54,11 +55,21 @@ export async function POST(req: Request) {
 
     const extension = extensionFor(file.type, file.name)
     const objectKey = `media/${new Date().getUTCFullYear()}/${String(new Date().getUTCMonth() + 1).padStart(2, '0')}/${randomUUID()}-${sanitizeFileName(file.name).replace(/\.[^.]+$/, '')}.${extension}`
-    await uploadObject(objectKey, bytes, file.type)
+    // Approved images go to a public-read bucket for direct browser/CDN delivery.
+    // Documents always stay in the private bucket and are served only after auth.
+    const storageBucket = kind === 'image' ? getPublicAssetsBucket() : getPrivateStorageBucket()
+    const cacheControl = kind === 'image'
+      ? 'public, max-age=31536000, immutable'
+      : 'private, max-age=300, must-revalidate'
+    const publicSrc = kind === 'image' ? getPublicObjectUrl(objectKey, storageBucket) : ''
+
+    await uploadObject(objectKey, bytes, file.type, cacheControl, storageBucket)
+    let insertedId: number | null = null
     try {
       const [row] = await db.insert(mediaItems).values({
-        src: objectKey,
+        src: publicSrc || objectKey,
         storageKey: objectKey,
+        storageBucket,
         contentType: file.type,
         sizeBytes: file.size,
         isPublic: kind === 'image',
@@ -68,11 +79,23 @@ export async function POST(req: Request) {
         altBn: altBn || '',
         kind,
       }).returning({ id: mediaItems.id })
+      insertedId = row.id
 
-      await auditAdminAction({ actorEmail: admin.email, action: 'media.upload', entity: 'media_items', entityId: String(row.id), metadata: { kind, contentType: file.type, sizeBytes: file.size }, request: req })
-      return NextResponse.json({ ok: true, id: row.id, src: `/api/media/${row.id}`, kind, contentType: file.type, sizeBytes: file.size }, { status: 201 })
+      // Private documents get an application URL, never a raw storage URL/key.
+      const src = publicSrc || `/api/media/${row.id}`
+      if (!publicSrc) {
+        await db.update(mediaItems).set({ src, updatedAt: new Date() }).where(eq(mediaItems.id, row.id))
+      }
+
+      await auditAdminAction({ actorEmail: admin.email, action: 'media.upload', entity: 'media_items', entityId: String(row.id), metadata: { kind, contentType: file.type, sizeBytes: file.size, storageBucket, isPublic: kind === 'image' }, request: req })
+      return NextResponse.json({ ok: true, id: row.id, src, kind, contentType: file.type, sizeBytes: file.size, storageBucket, isPublic: kind === 'image' }, { status: 201 })
     } catch (databaseError) {
-      try { await deleteObject(objectKey) } catch (cleanupError) { console.error('Orphaned media cleanup failed', cleanupError) }
+      // Do not leave a database row or storage object behind if the upload record
+      // cannot be finalized. Storage deletion is best effort; errors are logged.
+      if (insertedId !== null) {
+        try { await db.delete(mediaItems).where(eq(mediaItems.id, insertedId)) } catch (cleanupError) { console.error('Failed to remove incomplete media row', cleanupError) }
+      }
+      try { await deleteObject(objectKey, storageBucket) } catch (cleanupError) { console.error('Orphaned media cleanup failed', cleanupError) }
       throw databaseError
     }
   } catch (error) {

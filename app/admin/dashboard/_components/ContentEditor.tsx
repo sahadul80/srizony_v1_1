@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff, Pencil, Save, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge } from '@/app/components/ui/badge'
-import { Button } from '@/app/components/ui/button'
-import { Card, CardContent, CardHeader } from '@/app/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { createContent, deleteContent, isSlugTaken, setContentVisibility, updateContent } from '@/lib/api/siteContent'
+import { MediaField } from './MediaField'
 import { COMPONENTS, SLUG_PATTERN, type ContentComponent, type ContentRecord, type ContentValues, type FieldDef } from '@/lib/cms/components'
 
 type SlugState = 'idle' | 'checking' | 'ok' | 'taken' | 'invalid'
@@ -17,7 +18,7 @@ function Input({ field, name, value, disabled, onChange, label }: { field: Field
   const common = { id: `f-${name}`, disabled, value, 'aria-label': label, onChange: (e: React.ChangeEvent<HTMLInputElement & HTMLTextAreaElement & HTMLSelectElement>) => onChange(e.target.value) }
   if (field.type === 'textarea') return <textarea className="ui-textarea" rows={field.key === 'body' ? 7 : 3} {...common} />
   if (field.type === 'select') return <select className="ui-select" {...common}><option value="">— Select —</option>{field.options!.map((o) => <option key={o} value={o}>{o}</option>)}</select>
-  const type = field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : 'text'
+  const type = field.type === 'date' ? 'date' : field.type === 'number' ? 'number' : field.type === 'email' ? 'email' : field.type === 'url' ? 'url' : 'text'
   return <input className="ui-input" type={type} placeholder={field.type === 'image' || field.type === 'url' ? '/path or https://…' : undefined} {...common} />
 }
 
@@ -31,16 +32,18 @@ export function ContentEditor({ component, record, onSaved, onDeleted, onClose }
 }) {
   const def = COMPONENTS[component]
   const isNew = !record
-  const [editing, setEditing] = useState(isNew)
+  const [editing, setEditing] = useState(true)
   const [values, setValues] = useState<ContentValues>(record?.values ?? blank(component))
   const [slug, setSlug] = useState(record?.slug ?? '')
   const [slugTouched, setSlugTouched] = useState(!isNew)
   const [slugState, setSlugState] = useState<SlugState>('idle')
   const [busy, setBusy] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [saveError, setSaveError] = useState('')
+  const [saveFieldError, setSaveFieldError] = useState('')
   const checkId = useRef(0)
 
-  useEffect(() => { setValues(record?.values ?? blank(component)); setSlug(record?.slug ?? ''); setSlugTouched(!!record); setEditing(!record); setSlugState('idle') }, [record, component])
+  useEffect(() => { setValues(record?.values ?? blank(component)); setSlug(record?.slug ?? ''); setSlugTouched(!!record); setEditing(true); setSlugState('idle'); setSaveError(''); setSaveFieldError('') }, [record, component])
 
   // Live slug validation (format + uniqueness) while editing.
   useEffect(() => {
@@ -54,11 +57,11 @@ export function ContentEditor({ component, record, onSaved, onDeleted, onClose }
     return () => clearTimeout(t)
   }, [slug, editing, component, record])
 
-  const set = (key: string, v: string) => setValues((cur) => {
+  const set = (key: string, v: string) => { setSaveError(''); setSaveFieldError(''); setValues((cur) => {
     const next = { ...cur, [key]: v }
     if (isNew && !slugTouched && key === 'title_en') setSlug(slugify(v))
     return next
-  })
+  }) }
 
   const title = values.title_en || (isNew ? `New ${def.label.toLowerCase()}` : slug)
   const status = record?.status ?? 'draft'
@@ -66,13 +69,20 @@ export function ContentEditor({ component, record, onSaved, onDeleted, onClose }
   async function save() {
     if (!SLUG_PATTERN.test(slug)) return toast.error('Enter a valid slug (lowercase letters, numbers and hyphens).')
     setBusy(true)
+    setSaveError(''); setSaveFieldError('')
     try {
       // Slug validation is always re-run immediately before saving.
       if ((!record || slug !== record.slug) && (await isSlugTaken(component, slug, record?.id))) { setSlugState('taken'); throw new Error(`The slug “${slug}” is already in use.`) }
       const saved = record ? await updateContent(record.id, slug, values, record.updatedAt) : await createContent(component, slug, values)
       toast.success(record ? 'Changes saved.' : `${def.label} created.`)
       setEditing(false); onSaved(saved)
-    } catch (e) { toast.error(e instanceof Error ? e.message : 'Unable to save.') } finally { setBusy(false) }
+    } catch (e) {
+      const err = e as Error & { field?: string; status?: number }
+      const message = err.message || 'Unable to save.'
+      setSaveError(message)
+      setSaveFieldError(err.field || '')
+      toast.error(message, { description: err.status === 409 ? 'Your draft is still here. Copy any important edits, reload the latest record if another editor changed it, then try again.' : undefined })
+    } finally { setBusy(false) }
   }
 
   async function toggleVisibility() {
@@ -95,7 +105,7 @@ export function ContentEditor({ component, record, onSaved, onDeleted, onClose }
     <Card className="cms-form-card">
       <CardHeader>
         <div className="cms-form-header">
-          <div><h2>{title}</h2><small><code>{slug || 'no-slug-yet'}</code> · {def.label}</small></div>
+          <div><h2>{title}</h2><small><code>{slug || 'no-slug-yet'}</code> · {def.label}{editing ? ' · Save to apply changes to the site' : ' · Read-only view'}</small></div>
           <div className="cms-form-actions">
             {record && <Badge variant={status === 'published' ? 'default' : 'outline'}>{status}</Badge>}
             {record && !editing && <Button variant="outline" size="sm" onClick={() => setEditing(true)} disabled={busy}><Pencil size={14} /> Edit</Button>}
@@ -108,14 +118,17 @@ export function ContentEditor({ component, record, onSaved, onDeleted, onClose }
       <CardContent>
         <div className="cms-form-grid">
           <label className="cms-field cms-span-2" htmlFor="f-slug"><span>Slug <b>*</b></span>
-            <input id="f-slug" className="ui-input" value={slug} disabled={!editing} onChange={(e) => { setSlug(e.target.value.toLowerCase()); setSlugTouched(true) }} placeholder="unique-url-name" />
+            <input id="f-slug" className="ui-input" value={slug} disabled={!editing} onChange={(e) => { setSlug(e.target.value.toLowerCase()); setSlugTouched(true); setSaveError(''); setSaveFieldError('') }} placeholder="unique-url-name" />
             {editing && slugHint && <small className={`cms-slug cms-slug-${slugState}`}>{slugHint}</small>}
           </label>
-          {def.fields.map((field) => field.bilingual
-            ? (['en', 'bn'] as const).map((lng) => { const name = `${field.key}_${lng}`; const label = `${field.label} (${lng === 'en' ? 'English' : 'বাংলা'})`; return (
-                <label key={name} className={`cms-field ${field.type === 'textarea' ? 'cms-span-2' : ''}`} htmlFor={`f-${name}`}><span>{label}{field.required && lng === 'en' && <b> *</b>}</span><Input field={field} name={name} label={label} value={values[name] ?? ''} disabled={!editing} onChange={(v) => set(name, v)} /></label>) })
-            : <label key={field.key} className={`cms-field ${field.type === 'textarea' ? 'cms-span-2' : ''}`} htmlFor={`f-${field.key}`}><span>{field.label}{field.required && <b> *</b>}</span><Input field={field} name={field.key} label={field.label} value={values[field.key] ?? ''} disabled={!editing} onChange={(v) => set(field.key, v)} />{field.help && editing && <small className="admin-small-note">{field.help}</small>}</label>)}
+          {def.fields.map((field) => field.type === 'image'
+            ? <div key={field.key} className="cms-span-2"><MediaField label={field.label} value={values[field.key] ?? ''} onChange={(v) => set(field.key, v)} disabled={!editing} alt={values.title_en ?? ''} helper={field.help} />{saveFieldError === field.key && <small className="cms-field-error">Please check this image field.</small>}</div>
+            : field.bilingual
+              ? (['en', 'bn'] as const).map((lng) => { const name = `${field.key}_${lng}`; const label = `${field.label} (${lng === 'en' ? 'English' : 'বাংলা'})`; return (
+                  <label key={name} className={`cms-field ${field.type === 'textarea' ? 'cms-span-2' : ''}`} htmlFor={`f-${name}`}><span>{label}{field.required && lng === 'en' && <b> *</b>}</span><Input field={field} name={name} label={label} value={values[name] ?? ''} disabled={!editing} onChange={(v) => set(name, v)} />{field.help && editing && <small className="admin-small-note">{field.help}</small>}{saveFieldError === name && <small className="cms-field-error">Please check this value.</small>}</label>) })
+              : <label key={field.key} className={`cms-field ${field.type === 'textarea' ? 'cms-span-2' : ''}`} htmlFor={`f-${field.key}`}><span>{field.label}{field.required && <b> *</b>}</span><Input field={field} name={field.key} label={field.label} value={values[field.key] ?? ''} disabled={!editing} onChange={(v) => set(field.key, v)} />{field.help && editing && <small className="admin-small-note">{field.help}</small>}{saveFieldError === field.key && <small className="cms-field-error">Please check this value.</small>}</label>)}
         </div>
+        {saveError && <div className="cms-save-error" role="alert"><strong>Changes were not saved.</strong><span>{saveError}</span><small>Your edits are still in this form. Correct the highlighted field or retry after resolving the issue.</small></div>}
         {editing && <div className="cms-form-footer">
           <Button variant="outline" onClick={() => (record ? (setValues(record.values), setSlug(record.slug), setEditing(false)) : onClose?.())} disabled={busy}>Cancel</Button>
           <Button onClick={() => void save()} disabled={busy || slugState === 'taken' || slugState === 'invalid'}><Save size={15} /> {busy ? 'Saving…' : record ? 'Save changes' : `Create ${def.label.toLowerCase()}`}</Button>

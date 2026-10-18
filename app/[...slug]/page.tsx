@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation'
-import ContentPage from '../components/ContentPage'
+import ContentPage from '@/components/pages/ContentPage'
 import type { Metadata } from 'next'
 import { getCmsMenuIndex, getPublicSiteSnapshot, resolvePagePath } from '@/lib/site'
 

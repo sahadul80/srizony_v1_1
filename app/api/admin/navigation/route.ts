@@ -1,14 +1,15 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { failure, requireAdmin } from '@/lib/cms/guard'
-import { createMenu, deleteMenu, getNavigationTree, saveNavigationOrder, updateMenu, type MoveNode } from '@/lib/cms/navigation'
+import { createMenu, deleteMenu, getNavigationTree, saveNavigationOrder, updateMenu, updateNavigationGroup, type MoveNode } from '@/lib/cms/navigation'
 import { auditAdminAction } from '@/lib/security'
 
-const fields = { labelEn: z.string().trim().min(1).max(120), labelBn: z.string().trim().max(120).default(''), slug: z.string().trim().max(160).default(''), contentTypes: z.array(z.string()).default([]) }
+const fields = { labelEn: z.string().trim().min(1).max(120), labelBn: z.string().trim().max(120).default(''), slug: z.string().trim().max(500).default(''), renderedComponents: z.array(z.string()).default([]), menuType: z.enum(['page', 'external']).default('page'), sectionCount: z.number().int().min(1).max(12).default(1), sectionContentType: z.string().default('richText'), sectionButtonType: z.enum(['none', 'primary', 'secondary', 'both']).default('none') }
 const createSchema = z.object({ groupKey: z.string().min(1).max(120), parentId: z.number().int().positive().nullable().default(null), ...fields })
 const updateSchema = z.object({ id: z.number().int().positive(), ...fields })
 const moveNode: z.ZodType<MoveNode> = z.lazy(() => z.object({ id: z.number().int().positive(), children: z.array(moveNode).optional() }))
 const orderSchema = z.object({ groupKey: z.string().min(1), tree: z.array(moveNode) })
+const renameGroupSchema = z.object({ action: z.literal('renameGroup'), groupKey: z.string().min(1).max(120), labelEn: z.string().trim().min(1).max(120), labelBn: z.string().trim().max(120).default('') })
 const noStore = { 'Cache-Control': 'no-store' }
 
 export async function GET() {
@@ -22,7 +23,7 @@ export async function POST(req: Request) {
   if (guard.denied) return guard.denied
   const admin = guard.admin!
   const body = createSchema.safeParse(await req.json().catch(() => null))
-  if (!body.success) return NextResponse.json({ error: 'Enter a menu name and choose at least one content component.' }, { status: 400 })
+  if (!body.success) return NextResponse.json({ error: 'Check the menu name, destination URL, section count and menu settings.' }, { status: 400 })
   try {
     const result = await createMenu(body.data, admin.email)
     await auditAdminAction({ actorEmail: admin.email, action: 'navigation.create', entity: 'nav_item', entityId: String(result.id), metadata: { slug: result.slug }, request: req })
@@ -47,7 +48,16 @@ export async function PATCH(req: Request) {
   const guard = await requireAdmin('admin', 'editor')
   if (guard.denied) return guard.denied
   const admin = guard.admin!
-  const body = orderSchema.safeParse(await req.json().catch(() => null))
+  const payload = await req.json().catch(() => null)
+  const rename = renameGroupSchema.safeParse(payload)
+  if (rename.success) {
+    try {
+      const result = await updateNavigationGroup(rename.data.groupKey, rename.data.labelEn, rename.data.labelBn)
+      await auditAdminAction({ actorEmail: admin.email, action: 'navigation.group.rename', entity: 'nav_group', entityId: rename.data.groupKey, request: req })
+      return NextResponse.json({ ok: true, ...result })
+    } catch (e) { return failure(e, 'Unable to rename the navigation group.') }
+  }
+  const body = orderSchema.safeParse(payload)
   if (!body.success) return NextResponse.json({ error: 'Invalid navigation order.' }, { status: 400 })
   try {
     await saveNavigationOrder(body.data.groupKey, body.data.tree)

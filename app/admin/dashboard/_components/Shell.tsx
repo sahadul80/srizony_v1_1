@@ -4,7 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Briefcase, ChevronDown, ChevronRight, Database, FileSpreadsheet, FileText, Inbox, LayoutDashboard, LogOut, Mail, Menu, Network, Palette, Settings, ShieldCheck, Users, X } from 'lucide-react'
+import { Briefcase, Building2, ChevronDown, ChevronRight, Database, FileSpreadsheet, FileText, Inbox, LayoutDashboard, LogOut, Mail, Menu, Network, Palette, Settings, ShieldCheck, Users, X, PanelsTopLeft, House } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { adminLogout } from '@/lib/api/auth'
 
@@ -16,7 +16,10 @@ export type AdminNavGroup =
 const GROUPS: readonly AdminNavGroup[] = [
   { kind: 'link', key: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, href: '/admin/dashboard/overview' },
   { kind: 'link', key: 'navigation', label: 'Site Navigation', icon: Network, href: '/admin/dashboard/navigation' },
+  { kind: 'link', key: 'landing-page', label: 'Landing Page', icon: House, href: '/admin/dashboard/page-builder?slug=%2F' },
   { kind: 'link', key: 'content', label: 'Site Content', icon: FileText, href: '/admin/dashboard/site-content' },
+  { kind: 'link', key: 'page-builder', label: 'Page Builder', icon: PanelsTopLeft, href: '/admin/dashboard/page-builder' },
+  { kind: 'link', key: 'portfolio', label: 'Portfolio', icon: Building2, href: '/admin/dashboard/portfolio' },
   { kind: 'link', key: 'visitors', label: 'Visitors', icon: Users, href: '/admin/dashboard/reports/visitors' },
   { kind: 'link', key: 'subscribers', label: 'Subscribers', icon: Mail, href: '/admin/dashboard/reports/newsletter' },
   { kind: 'link', key: 'contacts', label: 'Contact Requests', icon: Inbox, href: '/admin/dashboard/reports/submissions' },

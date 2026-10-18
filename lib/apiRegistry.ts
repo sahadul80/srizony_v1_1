@@ -309,6 +309,12 @@ export const API_REGISTRY: ApiEndpoint[] = [
  },
  {
   "method": "GET",
+  "path": "/api/media/by-key/[...key]",
+  "access": "Public image only",
+  "description": "Same-origin proxy for legacy Neon storage URLs; requires a ready public image record"
+ },
+ {
+  "method": "GET",
   "path": "/api/navigation",
   "access": "Public",
   "description": "Public navigation"

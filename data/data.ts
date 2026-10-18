@@ -7,6 +7,8 @@
  */
 import { BriefcaseBusiness, Coins, CreditCard, Droplets, GraduationCap, HandHeart, HeartPulse, Landmark, Smartphone, SunMedium, WalletCards, Wheat } from 'lucide-react';
 import { HERO_FEATURED, LEGACY_IMAGE, SLUG_IMAGE_KEYS, poolUrl } from './landingImages'
+import { HOME_HERO_COPY_DEFAULTS } from './homeHeroDefaults'
+import { contentDetails } from './contentDetails'
 import type { Bilingual, HeroData, MediaItem, NavGroup, NavItem, PageData, ContactInfo, ThemeDefinition, ContentEntry, Section, IconName, SDGStep, PaymentInfo } from '../types/entityType'
 
 // ---- system: image registry ----
@@ -322,30 +324,7 @@ const media = {
 // ---- system: home ----
 
 const homeHero: HeroData = {
-  eyebrow: {
-    en: 'Srizony Foundation',
-    bn: 'সৃজনী ফাউন্ডেশন',
-  },
-  headingLineOne: {
-    en: 'Empowering people,',
-    bn: 'মানুষের ক্ষমতায়ন,',
-  },
-  headingLineTwo: {
-    en: 'transforming lives.',
-    bn: 'জীবনের রূপান্তর।',
-  },
-  description: {
-    en: 'Srizony Foundation has worked since 1985 across livelihoods, health, education, rights, climate resilience and financial inclusion for disadvantaged communities.',
-    bn: 'সৃজনী ফাউন্ডেশন ১৯৮৫ সাল থেকে সুবিধাবঞ্চিত মানুষের জীবিকা, স্বাস্থ্য, শিক্ষা, অধিকার, জলবায়ু সহনশীলতা ও আর্থিক অন্তর্ভুক্তি নিয়ে কাজ করে আসছে।',
-  },
-  primaryAction: {
-    label: { en: 'Donate Now', bn: 'দান করুন' },
-    href: '/donate',
-  },
-  secondaryAction: {
-    label: { en: 'Explore Our Work', bn: 'আমাদের কার্যক্রম দেখুন' },
-    href: '/social-development',
-  },
+  ...HOME_HERO_COPY_DEFAULTS,
   slides: [
     {
       id: 'community-development',
@@ -376,9 +355,6 @@ const homeHero: HeroData = {
     { id: 'villages', icon: 'location', value: { en: '1,898', bn: '১,৮৯৮' }, label: { en: 'Villages', bn: 'গ্রাম' } },
     { id: 'members', icon: 'users', value: { en: '69,753', bn: '৬৯,৭৫৩' }, label: { en: 'Members', bn: 'সদস্য' } },
   ],
-  autoplay: true,
-  autoplayInterval: 4000,
-  
 }
 
 // ---- content: entries ----
@@ -497,15 +473,13 @@ homeHero.slides = HERO_FEATURED.map((featured) => {
 })
 
 function entryToPage(entry: ContentEntry, allRelated = true): PageData {
-  const gallery = entry.gallery?.length ? entry.gallery : [entry.image, relatedImage(entry.slug, entry.title)]
   return {
     slug:`/${entry.category === 'project' ? 'projects' : entry.category === 'news' ? 'news' : entry.category === 'notice' ? 'notice' : entry.category === 'career' ? 'job-circular' : 'enterprise'}/${entry.slug}`,
     title:entry.title,
     subtitle:entry.excerpt,
     heroImage:entry.image.src,
     sections:[
-      ...(entry.video ? [{type:'video' as const,heading:{en:'Featured Video',bn:'ফিচার্ড ভিডিও'},body:{en:'Watch the featured video for this story.',bn:'এই কনটেন্টের ফিচার্ড ভিডিও দেখুন।'},poster:entry.image.src,embedUrl:entry.video.embedUrl,sourceUrl:entry.video.sourceUrl}] : []),
-      ...(entry.category!=='project' ? [{type:'carousel' as const,eyebrow:{en:'Article Media',bn:'প্রবন্ধের মিডিয়া'},heading:{en:'Related images',bn:'সম্পর্কিত ছবিগুলো'},items:gallery.map(m=>({title:entry.title,body:entry.excerpt,image:m}))}] : []),
+      // Slug pages intentionally omit article-media galleries and embedded media; the story remains text-first.
       {type:'richText',eyebrow:{en:entry.category==='project'?'Project Detail':entry.category==='news'?'News Detail':entry.category==='notice'?'Notice Detail':entry.category==='career'?'Career Opportunity':'Enterprise Detail',bn:entry.category==='project'?'প্রকল্প বিস্তারিত':entry.category==='news'?'সংবাদ বিস্তারিত':entry.category==='notice'?'নোটিশ বিস্তারিত':entry.category==='career'?'ক্যারিয়ার সুযোগ':'উদ্যোগ বিস্তারিত'},heading:entry.title,body:[{en:`Updated ${entry.date||'2026-08-23'}`,bn:`হালনাগাদ ${entry.date||'২০২৬-০৮-২৩'}`},...entry.body],image:entry.image},
       ...(allRelated ? [{type:'cta' as const,heading:{en:'Continue exploring',bn:'আরও দেখুন'},body:{en:'Explore related content or contact Srizony Foundation for official information.',bn:'সম্পর্কিত বিষয় দেখুন অথবা অফিসিয়াল তথ্যের জন্য সৃজনী ফাউন্ডেশনের সঙ্গে যোগাযোগ করুন।'},primary:{label:{en:'Contact Us',bn:'যোগাযোগ করুন'},href:'/contact'},secondary:{label:{en:'Donate',bn:'দান করুন'},href:'/donate'}}] : []),
     ]
@@ -558,7 +532,7 @@ const navGroups: NavGroup[] = [
           { label: { en: 'Founders Footprint', bn: 'প্রতিষ্ঠাতার অবদান' }, href: '/founders-footprint' },
           { label: { en: 'Awards & Recognition', bn: 'পুরস্কার ও স্বীকৃতি' }, href: '/awards-recognition' },
           { label: { en: 'Partners & Networks', bn: 'অংশীদার ও নেটওয়ার্ক' }, href: '/partners-networks' },
-          { label: { en: 'Senior Management', bn: 'সিনিয়র ম্যানেজমেন্ট' }, href: '/senior-management' },
+          { label: { en: 'Executive Committee', bn: 'নির্বাহী কমিটি' }, href: '/executive-committee' },
           { label: { en: 'Operational Structure', bn: 'অপারেশনাল কাঠামো' }, href: '/operational-structure' },
           { label: { en: 'Governing Body', bn: 'গভর্নিং বডি' }, href: '/governing-body' },
             ],
@@ -637,6 +611,52 @@ const pages: Record<string, PageData> = {
     heroTone:'green',
     sections:[
       {
+        type:'carousel',
+        homeComponent:'hero',
+        presentation:'scroller',
+        eyebrow:{en:'Srizony Foundation',bn:'সৃজনী ফাউন্ডেশন'},
+        heading:{en:'Landing Page Hero',bn:'ল্যান্ডিং পেজের প্রধান স্লাইড'},
+        body:{en:'Manage the homepage hero image sequence here.',bn:'হোমপেজের প্রধান ছবিগুলোর ধারাবাহিকতা এখানে পরিচালনা করুন।'},
+        items:homeHero.slides.map((slide)=>({
+          title:slide.title,
+          body:slide.description,
+          image:imageMedia(slide.image,slide.title),
+          href:slide.href,
+        })),
+      },
+      {
+        type:'stats',
+        homeComponent:'growth',
+        eyebrow:{en:'Since 1985',bn:'১৯৮৫ সাল থেকে'},
+        heading:{en:'Growing together',bn:'একসাথে এগিয়ে চলা'},
+        items:[
+          {value:'69753',label:{en:'Members',bn:'সদস্য'}},
+          {value:'2540',label:{en:'Staff',bn:'কর্মী'}},
+          {value:'1898',label:{en:'Villages',bn:'গ্রাম'}},
+          {value:'80',label:{en:'Branch offices',bn:'শাখা অফিস'}},
+        ],
+        buttonConfig:{visible:true,mode:'primary',label:{en:'About us',bn:'আমাদের সম্পর্কে'},href:'/about-us',action:'route'},
+      },
+      {
+        type:'cards',
+        homeComponent:'missionVisionValues',
+        eyebrow:{en:'Who We Are',bn:'আমরা যারা'},
+        heading:{en:'Mission, Vision & Values',bn:'মিশন, ভিশন ও মূল্যবোধ'},
+        columns:3,
+        items:[
+          {title:{en:'Our Mission',bn:'আমাদের মিশন'},body:{en:'Create an enabling environment for poverty reduction, socio-economic development and human rights.',bn:'দারিদ্র্য বিমোচন, আর্থ-সামাজিক উন্নয়ন ও মানবাধিকার প্রতিষ্ঠায় সহায়ক পরিবেশ তৈরি করা।'},icon:'heart'},
+          {title:{en:'Our Vision',bn:'আমাদের ভিশন'},body:{en:'A Bangladesh where every person, especially the poor and marginalised, lives with dignity, opportunity and rights.',bn:'এমন একটি বাংলাদেশ, যেখানে প্রত্যেক মানুষ, বিশেষ করে দরিদ্র ও প্রান্তিক জনগোষ্ঠী, মর্যাদা, সুযোগ ও অধিকারসহ বাঁচতে পারে।'},icon:'users'},
+          {title:{en:'Our Values',bn:'আমাদের মূল্যবোধ'},body:{en:'Accountability and fairness: abiding by rules and policies in everything we do.',bn:'জবাবদিহিতা ও ন্যায়পরায়ণতা: প্রতিটি কাজে নীতি ও নিয়ম মেনে চলা।'},icon:'shield'},
+        ],
+      },
+      {
+        type:'richText',
+        homeComponent:'locations',
+        eyebrow:{en:'National Footprint',bn:'জাতীয় বিস্তৃতি'},
+        heading:{en:'Our offices across Bangladesh',bn:'সারা বাংলাদেশে আমাদের কার্যালয়'},
+        body:[{en:'Select a pin or branch to view its location and contact details.',bn:'শাখার অবস্থান ও যোগাযোগের তথ্য দেখতে পিন বা শাখা নির্বাচন করুন।'}],
+      },
+      {
         type:'richText',
         heading:{en:'Legacy of Srizony Foundation',bn:'সৃজনী ফাউন্ডেশনের উত্তরাধিকার'},
         body:[
@@ -677,6 +697,21 @@ const pages: Record<string, PageData> = {
       },
       {
         type:'cards',
+        homeComponent:'developmentAreas',
+        eyebrow:{en:'What We Do',bn:'আমাদের কার্যক্রম'},
+        heading:{en:'Integrated Development Areas',bn:'সমন্বিত উন্নয়ন ক্ষেত্র'},
+        columns:3,
+        items:[
+          {title:{en:'Health & Nutrition',bn:'স্বাস্থ্য ও পুষ্টি'},body:{en:'Primary healthcare and nutrition for communities.',bn:'কমিউনিটির জন্য প্রাথমিক স্বাস্থ্যসেবা ও পুষ্টি।'},icon:'heart',href:'/health-program'},
+          {title:{en:'Social Development',bn:'সামাজিক উন্নয়ন'},body:{en:'Rights, inclusion and community leadership.',bn:'অধিকার, অন্তর্ভুক্তি ও কমিউনিটি নেতৃত্ব।'},icon:'users',href:'/social-development'},
+          {title:{en:'Microfinance & Loans',bn:'ক্ষুদ্রঋণ ও ঋণ সেবা'},body:{en:'Savings and loans built around livelihoods.',bn:'জীবিকাকেন্দ্রিক সঞ্চয় ও ঋণসেবা।'},icon:'coins',href:'/microfinance-program'},
+          {title:{en:'Agriculture & Livelihood',bn:'কৃষি ও জীবিকা'},body:{en:'Climate-aware farming and rural income.',bn:'জলবায়ু-সচেতন কৃষি ও গ্রামীণ আয়।'},icon:'leaf',href:'/agriculture-livelihood'},
+          {title:{en:'Enterprise Development',bn:'এন্টারপ্রাইজ উন্নয়ন'},body:{en:'Social enterprises linking people to markets.',bn:'মানুষকে বাজারের সঙ্গে যুক্ত করা সামাজিক উদ্যোগ।'},icon:'briefcase',href:'/enterprise-development'},
+          {title:{en:'Education & Skills',bn:'শিক্ষা ও দক্ষতা'},body:{en:'Learning and practical skills for young people.',bn:'তরুণদের জন্য শিক্ষা ও ব্যবহারিক দক্ষতা।'},icon:'book',href:'/education-program'},
+        ]
+      },
+      {
+        type:'cards',
         heading:{en:'Srizony Enterprises',bn:'সৃজনী উদ্যোগসমূহ'},
         columns:4,
         items:enterpriseEntries.map((entry,i)=>({
@@ -689,11 +724,12 @@ const pages: Record<string, PageData> = {
       },
       {
         type:'carousel',
+        homeComponent:'stories',
         presentation:'scroller',
         collectionKind:'news',
-        eyebrow:{en:'Latest News',bn:'সর্বশেষ সংবাদ'},
-        heading:{en:'News from the Field',bn:'মাঠপর্যায়ের সংবাদ'},
-        body:{en:'Explore published updates on health, livelihoods, education, rights, climate resilience and community partnerships.',bn:'স্বাস্থ্য, জীবিকা, শিক্ষা, অধিকার, জলবায়ু সহনশীলতা ও কমিউনিটি অংশীদারিত্বের প্রকাশিত আপডেট দেখুন।'},
+        eyebrow:{en:'Impact Stories',bn:'প্রভাবের গল্প'},
+        heading:{en:'Success Story of Srizony',bn:'সৃজনীর সফলতার গল্প'},
+        body:{en:'Explore stories of people and communities creating lasting change with Srizony.',bn:'সৃজনীর সঙ্গে স্থায়ী পরিবর্তন গড়ে তোলা মানুষ ও কমিউনিটির গল্প জানুন।'},
         items:newsEntries.slice(0,6).map(entry=>({
           tag:{en:entry.date||'Update',bn:entry.date||'আপডেট'},
           title:entry.title,
@@ -701,6 +737,13 @@ const pages: Record<string, PageData> = {
           image:entry.image,
           href:`/news/${entry.slug}`,
         })),
+      },
+      {
+        type:'cta',
+        homeComponent:'donate',
+        heading:{en:'Support Srizony',bn:'সৃজনীকে সহায়তা করুন'},
+        body:{en:'Your support helps communities access opportunity, essential services and a better future.',bn:'আপনার সহায়তা কমিউনিটির জন্য সুযোগ, প্রয়োজনীয় সেবা ও উন্নত ভবিষ্যৎ গড়তে সাহায্য করে।'},
+        primary:{label:{en:'Donate Now',bn:'দান করুন'},href:'/donate'},
       }
     ]
   },
@@ -776,8 +819,7 @@ const pages: Record<string, PageData> = {
   ]},
   '/senior-management': {slug:'/senior-management',title:{en:'Senior Management',bn:'সিনিয়র ম্যানেজমেন্ট'},sections:[{type:'cards',heading:{en:'Leadership Team',bn:'নেতৃত্ব দল'},columns:3,items:Array.from({length:6},(_,i)=>({title:{en:['Executive Director','Director — Programs','Director — Finance','Head — Microfinance','Head — HR & Admin','Head — Monitoring & Learning'][i],bn:['নির্বাহী পরিচালক','পরিচালক — প্রোগ্রাম','পরিচালক — ফাইন্যান্স','প্রধান — ক্ষুদ্রঋণ','প্রধান — মানবসম্পদ ও প্রশাসন','প্রধান — মনিটরিং ও লার্নিং'][i]},body:{en:'Leadership role supporting integrated development, systems and people.',bn:'সমন্বিত উন্নয়ন, ব্যবস্থা ও জনবল ব্যবস্থাপনায় দায়িত্বশীল নেতৃত্বের ভূমিকা।'},icon:['users','briefcase','coins','building','heart','scale'][i] as IconName}))}]},
   '/operational-structure': {slug:'/operational-structure',title:{en:'Operational Structure',bn:'অপারেশনাল কাঠামো'},sections:[{type:'diagram',heading:{en:'How the organization works',bn:'প্রতিষ্ঠান কীভাবে কাজ করে'},variant:'governance'},{type:'timeline',heading:{en:'Operating cycle',bn:'কার্যক্রমের চক্র'},items:[{year:'01',title:{en:'Listen',bn:'শোনা'},body:{en:'Community needs, data and feedback inform program design.',bn:'কমিউনিটির প্রয়োজন, তথ্য ও মতামত কর্মসূচি নকশায় প্রভাব ফেলে।'}},{year:'02',title:{en:'Plan',bn:'পরিকল্পনা'},body:{en:'Teams translate priorities into programs, budgets and partnerships.',bn:'অগ্রাধিকারকে কর্মসূচি, বাজেট ও অংশীদারিত্বে রূপ দেওয়া হয়।'}},{year:'03',title:{en:'Deliver',bn:'বাস্তবায়ন'},body:{en:'Local teams deliver services through branches and projects.',bn:'স্থানীয় দল শাখা ও প্রকল্পের মাধ্যমে সেবা দেয়।'}},{year:'04',title:{en:'Learn',bn:'শেখা'},body:{en:'Monitoring, evaluation and participant feedback improve the next cycle.',bn:'পর্যবেক্ষণ, মূল্যায়ন ও অংশগ্রহণকারীর মতামত পরবর্তী ধাপকে উন্নত করে।'}}]}]},
-  '/executive-secretariat': {slug:'/executive-secretariat',title:{en:'Executive Secretariat',bn:'এক্সিকিউটিভ সেক্রেটারিয়েট'},sections:[{type:'cards',heading:{en:'Core Functions',bn:'প্রধান দায়িত্ব'},columns:3,items:[{title:{en:'Coordination',bn:'সমন্বয়'},body:{en:'Connect leadership decisions with operational teams.',bn:'নেতৃত্বের সিদ্ধান্তকে অপারেশন টিমের সঙ্গে যুক্ত করা।'},icon:'users'},{title:{en:'Documentation',bn:'নথি ব্যবস্থাপনা'},body:{en:'Maintain institutional records, reports and meeting actions.',bn:'প্রাতিষ্ঠানিক নথি, প্রতিবেদন ও সভার সিদ্ধান্ত সংরক্ষণ।'},icon:'book'},{title:{en:'Communication',bn:'যোগাযোগ'},body:{en:'Support internal and external communication with partners and stakeholders.',bn:'অংশীদার ও স্টেকহোল্ডারের সঙ্গে অভ্যন্তরীণ ও বাহ্যিক যোগাযোগে সহায়তা।'},icon:'megaphone'}]}]},
-  '/public-relation': {slug:'/public-relation',title:{en:'Public Relation',bn:'জনসংযোগ'},sections:[{type:'gallery',heading:{en:'Communication & Outreach',bn:'যোগাযোগ ও প্রচার'},columns:3,items:[imageMedia(images.hero.primary,{en:'Community outreach',bn:'কমিউনিটি আউটরিচ'}),imageMedia(images.hero.feature,{en:'Public engagement',bn:'জনসম্পৃক্ততা'}),imageMedia(images.general.project2,{en:'Field communication',bn:'মাঠ যোগাযোগ'})]},{type:'cards',heading:{en:'Communication Channels',bn:'যোগাযোগের মাধ্যম'},columns:3,items:[{title:{en:'Community Engagement',bn:'কমিউনিটি সম্পৃক্ততা'},body:{en:'Dialogues, meetings and awareness campaigns with communities.',bn:'কমিউনিটির সঙ্গে সংলাপ, সভা ও সচেতনতামূলক কার্যক্রম।'},icon:'users'},{title:{en:'Media & Digital',bn:'মিডিয়া ও ডিজিটাল'},body:{en:'Stories, updates and public information through digital channels.',bn:'ডিজিটাল চ্যানেলের মাধ্যমে খবর, গল্প ও জনসাধারণের তথ্য।'},icon:'megaphone'},{title:{en:'Partner Communication',bn:'অংশীদার যোগাযোগ'},body:{en:'Timely information sharing with funders, agencies and partners.',bn:'দাতা, সংস্থা ও অংশীদারদের সঙ্গে সময়োপযোগী তথ্য আদান-প্রদান।'},icon:'building'}]}]},
+  '/executive-committee': {slug:'/executive-committee',title:{en:'Executive Committee',bn:'নির্বাহী কমিটি'},subtitle:{en:'The Executive Committee provides governance, strategic direction and oversight for the foundation’s mission and programs.',bn:'নির্বাহী কমিটি ফাউন্ডেশনের লক্ষ্য ও কর্মসূচির জন্য সুশাসন, কৌশলগত দিকনির্দেশনা এবং তদারকি নিশ্চিত করে।'},sections:[{type:'richText',heading:{en:'Governance and Responsibilities',bn:'সুশাসন ও দায়িত্ব'},body:[{en:'The Executive Committee guides institutional priorities, reviews plans and performance, promotes accountability, and supports the leadership team in delivering community-focused development programs. Member names and designations should be maintained by the CMS from officially approved records.',bn:'নির্বাহী কমিটি প্রাতিষ্ঠানিক অগ্রাধিকার নির্ধারণ, পরিকল্পনা ও কার্যক্রম পর্যালোচনা, জবাবদিহিতা জোরদার এবং কমিউনিটিকেন্দ্রিক উন্নয়ন কর্মসূচি বাস্তবায়নে নেতৃত্ব দলকে সহায়তা করে। সদস্যদের নাম ও পদবি অনুমোদিত অফিসিয়াল নথি অনুযায়ী CMS-এ সংরক্ষণ করতে হবে।'}]},{type:'cards',heading:{en:'Committee Responsibilities',bn:'কমিটির দায়িত্ব'},columns:3,items:[{title:{en:'Strategic Direction',bn:'কৌশলগত দিকনির্দেশনা'},body:{en:'Set priorities and review organizational plans against the foundation’s mission and community needs.',bn:'ফাউন্ডেশনের লক্ষ্য ও কমিউনিটির প্রয়োজন অনুযায়ী অগ্রাধিকার নির্ধারণ এবং প্রাতিষ্ঠানিক পরিকল্পনা পর্যালোচনা।'},icon:'arrow'},{title:{en:'Governance & Accountability',bn:'সুশাসন ও জবাবদিহিতা'},body:{en:'Promote transparent decisions, sound oversight and responsible use of organizational resources.',bn:'স্বচ্ছ সিদ্ধান্ত, কার্যকর তদারকি এবং প্রাতিষ্ঠানিক সম্পদের দায়িত্বশীল ব্যবহার নিশ্চিত করা।'},icon:'shield'},{title:{en:'Program Oversight',bn:'কর্মসূচি তদারকি'},body:{en:'Review progress, evidence and risks to help programs remain effective, inclusive and sustainable.',bn:'কর্মসূচির অগ্রগতি, প্রমাণ ও ঝুঁকি পর্যালোচনা করে কার্যকারিতা, অন্তর্ভুক্তি ও স্থায়িত্বে সহায়তা করা।'},icon:'users'}]}]},
   '/good-governance': {slug:'/good-governance',title:{en:'Human Rights & Good Governance',bn:'মানবাধিকার ও সুশাসন'},subtitle:{en:'Rights, accountability and dignity for all',bn:'সবার জন্য অধিকার, জবাবদিহিতা ও মর্যাদা'},heroImage:images.general.project2,sections:[{type:'richText',heading:{en:'Human Rights Work',bn:'মানবাধিকার কার্যক্রম'},body:[{en:'Srizony Foundation has implemented human rights-related activities since 1992 in its program intervention areas.',bn:'সৃজনী ফাউন্ডেশন ১৯৯২ সাল থেকে কর্মএলাকায় মানবাধিকার-সম্পর্কিত কার্যক্রম বাস্তবায়ন করে আসছে।'},{en:'The organization has undertaken initiatives including prevention of women and child trafficking, legal aid, gender development, disability development, adolescent development, children’s groups and rights-awareness training.',bn:'নারী ও শিশু পাচার প্রতিরোধ, আইনি সহায়তা, জেন্ডার উন্নয়ন, প্রতিবন্ধী উন্নয়ন, কিশোর-কিশোরী উন্নয়ন, শিশু গ্রুপ গঠন ও অধিকার প্রশিক্ষণসহ বিভিন্ন উদ্যোগ বাস্তবায়ন করা হয়েছে।'}],image:imageMedia(images.general.project2,{en:'Human rights program',bn:'মানবাধিকার কর্মসূচি'})},{type:'cards',heading:{en:'Good Governance Principles',bn:'সুশাসনের নীতিমালা'},columns:3,items:[{title:{en:'Participation',bn:'অংশগ্রহণ'},body:{en:'People are involved in decisions affecting their lives.',bn:'মানুষ তার জীবনকে প্রভাবিত করা সিদ্ধান্তে অংশ নেয়।'},icon:'users'},{title:{en:'Accountability',bn:'জবাবদিহিতা'},body:{en:'Processes and decisions are transparent and accountable.',bn:'প্রক্রিয়া ও সিদ্ধান্ত স্বচ্ছ ও জবাবদিহিমূলক।'},icon:'shield'},{title:{en:'Justice',bn:'ন্যায়বিচার'},body:{en:'Rights-based support helps address discrimination and injustice.',bn:'অধিকারভিত্তিক সহায়তা বৈষম্য ও অবিচার মোকাবিলায় সহায়তা করে।'},icon:'scale'}]},{type:'diagram',heading:{en:'Governance in practice',bn:'বাস্তবে সুশাসন'},variant:'impact'}]},
   '/reports': {slug:'/reports',title:{en:'Reports & Publications',bn:'রিপোর্ট ও প্রকাশনা'},sections:[{type:'reports',eyebrow:{en:'Official documents',bn:'অফিসিয়াল নথি'},heading:{en:'Reports & Publications',bn:'রিপোর্ট ও প্রকাশনা'},body:{en:'Only documents uploaded and published through the CMS are listed here.',bn:'CMS-এর মাধ্যমে আপলোড ও প্রকাশিত নথিগুলোই এখানে তালিকাভুক্ত হবে.'},items:[]},{type:'cta',heading:{en:'Need a specific report?',bn:'নির্দিষ্ট রিপোর্ট প্রয়োজন?'},body:{en:'Contact Srizony Foundation for an official copy that is not yet published online.',bn:'অনলাইনে প্রকাশিত নয় এমন অফিসিয়াল কপির জন্য সৃজনী ফাউন্ডেশনের সঙ্গে যোগাযোগ করুন।'},primary:{label:{en:'Contact Us',bn:'যোগাযোগ করুন'},href:'/contact'}}]},
   '/social-development': {slug:'/social-development',title:{en:'Social Development',bn:'সামাজিক উন্নয়ন'},subtitle:{en:'Integrated services for healthier, capable communities',bn:'স্বাস্থ্যবান ও সক্ষম কমিউনিটির জন্য সমন্বিত সেবা'},heroImage:images.general.project3,sections:[{type:'cards',heading:{en:'Program Areas',bn:'কর্মসূচির ক্ষেত্র'},columns:4,items:[['Health Program','স্বাস্থ্য কর্মসূচি','Primary healthcare, nutrition and maternal health.','প্রাথমিক স্বাস্থ্যসেবা, পুষ্টি ও মাতৃস্বাস্থ্য।','/health-program','heart',images.programs.health],['Education Program','শিক্ষা কর্মসূচি','Inclusive education and skills for life and work.','অন্তর্ভুক্তিমূলক শিক্ষা ও জীবন-জীবিকার দক্ষতা।','/education-program','book',images.programs.education],['Human Rights','মানবাধিকার','Legal aid, protection and rights awareness.','আইনি সহায়তা, সুরক্ষা ও অধিকার সচেতনতা।','/human-rights','scale',images.programs.humanRights],['Human Resource','মানবসম্পদ','Training, leadership and people development.','প্রশিক্ষণ, নেতৃত্ব ও মানবসম্পদ উন্নয়ন।','/human-resource','users',images.programs.humanResource],['Climate Change','জলবায়ু পরিবর্তন','Resilience, adaptation and environmental action.','সহনশীলতা, অভিযোজন ও পরিবেশগত উদ্যোগ।','/climate-change','leaf',images.programs.climateChange],['Agriculture & Livelihood','কৃষি ও জীবিকা','Productivity, enterprise and livelihood strengthening.','উৎপাদনশীলতা, উদ্যোগ ও জীবিকা শক্তিশালীকরণ।','/agriculture-livelihood','sun',images.programs.agricultureLivelihood],['Organizational Development','প্রাতিষ্ঠানিক উন্নয়ন','Capacity building for local institutions.','স্থানীয় প্রতিষ্ঠানের সক্ষমতা বৃদ্ধি।','/organizational-development','building',images.programs.organizationalDevelopment],['Social Enterprise','সামাজিক উদ্যোগ','Sustainable enterprise models supporting social impact.','সামাজিক প্রভাবকে সহায়তাকারী টেকসই উদ্যোগ।','/social-enterprise','briefcase',images.programs.socialEnterprise]].map(x=>({title:{en:x[0],bn:x[1]},body:{en:x[2],bn:x[3]},href:x[4],icon:x[5] as IconName,image:imageMedia(x[6],{en:`${x[0]} visual`,bn:`${x[1]} ভিজ্যুয়াল`})}))},{type:'carousel',presentation:'scroller',eyebrow:{en:'Latest News',bn:'সর্বশেষ সংবাদ'},heading:{en:'News from the field',bn:'মাঠপর্যায়ের সংবাদ'},body:{en:'Field Stories are part of our news stream. Open any story to read the full update.',bn:'মাঠের গল্প আমাদের সংবাদধারারই অংশ। যেকোনো সংবাদ খুলে সম্পূর্ণ আপডেট পড়ুন।'},items:newsEntries.slice(0,6).map(entry=>({tag:{en:entry.date||'Update',bn:entry.date||'আপডেট'},title:entry.title,body:entry.excerpt,image:entry.image,href:`/news/${entry.slug}`}))}]},
@@ -794,7 +836,6 @@ const pages: Record<string, PageData> = {
   '/climate-change': {slug:'/climate-change',title:{en:'Climate Change',bn:'জলবায়ু পরিবর্তন'},sections:[{type:'richText',heading:{en:'Building resilience where climate risk is highest',bn:'যেখানে জলবায়ু ঝুঁকি বেশি, সেখানে সহনশীলতা তৈরি'},body:[{en:'Climate action combines awareness, adaptation, sustainable agriculture, social forestry, renewable energy and resilient livelihoods.',bn:'জলবায়ু কার্যক্রমে সচেতনতা, অভিযোজন, টেকসই কৃষি, সামাজিক বনায়ন, নবায়নযোগ্য জ্বালানি ও সহনশীল জীবিকার সমন্বয় করা হয়।'}],image:imageMedia(images.general.project3,{en:'Climate and environment',bn:'জলবায়ু ও পরিবেশ'})},{type:'cards',heading:{en:'Climate Responses',bn:'জলবায়ু মোকাবিলার উদ্যোগ'},columns:3,items:[{title:{en:'Solar Energy',bn:'সৌর জ্বালানি'},body:{en:'Clean energy access for rural communities and productive use.',bn:'গ্রামীণ মানুষের জন্য পরিচ্ছন্ন জ্বালানি ও উৎপাদনশীল ব্যবহার।'},icon:'sun'},{title:{en:'Resilient Livelihoods',bn:'সহনশীল জীবিকা'},body:{en:'Agriculture and income options adapted to climate risk.',bn:'জলবায়ু ঝুঁকির সঙ্গে মানানসই কৃষি ও আয়ধারার বিকল্প।'},icon:'leaf'},{title:{en:'Environmental Awareness',bn:'পরিবেশ সচেতনতা'},body:{en:'Community education on responsible natural resource use.',bn:'প্রাকৃতিক সম্পদের দায়িত্বশীল ব্যবহার নিয়ে কমিউনিটি শিক্ষা।'},icon:'droplets'}]}]},
   '/agriculture-livelihood': {slug:'/agriculture-livelihood',title:{en:'Agriculture & Livelihood',bn:'কৃষি ও জীবিকা'},sections:[{type:'cards',heading:{en:'Livelihood Pathways',bn:'জীবিকার পথ'},columns:3,items:[{title:{en:'Farm Productivity',bn:'কৃষি উৎপাদনশীলতা'},body:{en:'Training and finance that help producers improve output and resilience.',bn:'উৎপাদন ও সহনশীলতা বাড়াতে প্রশিক্ষণ ও অর্থায়ন।'},icon:'sun'},{title:{en:'Enterprise',bn:'উদ্যোগ'},body:{en:'Small business and value-chain opportunities for households.',bn:'পরিবারের জন্য ছোট ব্যবসা ও ভ্যালু-চেইন সুযোগ।'},icon:'briefcase'},{title:{en:'Livestock & Poultry',bn:'প্রাণিসম্পদ ও পোল্ট্রি'},body:{en:'Productive assets that strengthen household income.',bn:'পরিবারের আয়কে শক্তিশালী করা উৎপাদনশীল সম্পদ।'},icon:'leaf'}]},{type:'gallery',heading:{en:'Livelihood in Action',bn:'জীবিকার কার্যক্রম'},columns:3,items:[imageMedia(images.hero.primary,{en:'Agriculture activity',bn:'কৃষি কার্যক্রম'}),imageMedia(images.general.project2,{en:'Livelihood support',bn:'জীবিকা সহায়তা'}),imageMedia(images.general.project1,{en:'Community enterprise',bn:'কমিউনিটি উদ্যোগ'})]}]},
   '/organizational-development': {slug:'/organizational-development',title:{en:'Organizational Development',bn:'প্রাতিষ্ঠানিক উন্নয়ন'},sections:[{type:'diagram',heading:{en:'From people to systems',bn:'মানুষ থেকে ব্যবস্থায়'},body:{en:'Capacity development strengthens teams, processes, data, accountability and local institutions.',bn:'সক্ষমতা উন্নয়ন দল, প্রক্রিয়া, তথ্য, জবাবদিহিতা ও স্থানীয় প্রতিষ্ঠানকে শক্তিশালী করে।'},variant:'impact'},{type:'cards',heading:{en:'Capability Areas',bn:'সক্ষমতার ক্ষেত্র'},columns:3,items:[{title:{en:'Systems & Process',bn:'ব্যবস্থা ও প্রক্রিয়া'},body:{en:'Clear workflows and standards that improve delivery.',bn:'স্পষ্ট কর্মপ্রবাহ ও মানদণ্ড যা সেবা উন্নত করে।'},icon:'building'},{title:{en:'Monitoring & Learning',bn:'পর্যবেক্ষণ ও শেখা'},body:{en:'Evidence and feedback inform better decisions.',bn:'তথ্য ও মতামত উন্নত সিদ্ধান্তে সহায়তা করে।'},icon:'scale'},{title:{en:'Local Institutions',bn:'স্থানীয় প্রতিষ্ঠান'},body:{en:'Community-based structures become stronger and more accountable.',bn:'কমিউনিটি-ভিত্তিক কাঠামো আরও শক্তিশালী ও জবাবদিহিমূলক হয়।'},icon:'users'}]}]},
-  '/social-enterprise': {slug:'/social-enterprise',title:{en:'Social Enterprise',bn:'সামাজিক উদ্যোগ'},sections:[{type:'cards',heading:{en:'Enterprise Ecosystem',bn:'সামাজিক উদ্যোগের ইকোসিস্টেম'},columns:4,items:enterpriseEntries.map((entry,i)=>({title:entry.title,body:entry.excerpt,icon:['heart','book','briefcase','building'][i%4] as IconName,href:`/enterprise/${entry.slug}`,image:entry.image}))}]},
   '/microfinance-program': {slug:'/microfinance-program',title:{en:'Microfinance Program',bn:'ক্ষুদ্রঋণ কর্মসূচি'},subtitle:{en:'Savings, groups, responsible finance and long-term financial inclusion',bn:'সঞ্চয়, গ্রুপ, দায়িত্বশীল অর্থায়ন ও দীর্ঘমেয়াদি আর্থিক অন্তর্ভুক্তি'},heroImage:images.programs.socialEnterprise,sections:[
     {type:'richText',eyebrow:{en:'Microfinance is more than a loan',bn:'ক্ষুদ্রঋণ শুধু ঋণ নয়'},heading:{en:'A structured financial-inclusion program built around savings, groups and responsible credit.',bn:'সঞ্চয়, গ্রুপ ও দায়িত্বশীল ঋণকে কেন্দ্র করে গড়ে ওঠা একটি আর্থিক অন্তর্ভুক্তিমূলক কর্মসূচি।'},body:[
       {en:'Srizony Foundation describes its microfinance program through branch operations, member groups, savings, active borrowers, loan portfolio and recovery performance.',bn:'সৃজনী ফাউন্ডেশন তার ক্ষুদ্রঋণ কর্মসূচিকে শাখা কার্যক্রম, সদস্য গ্রুপ, সঞ্চয়, সক্রিয় ঋণগ্রহীতা, ঋণ পোর্টফোলিও ও আদায় কার্যক্রমের মাধ্যমে পরিচালনা করে।'},
@@ -882,13 +923,13 @@ const systemData = {
 } as const
 
 const contentData = {
-  projectEntries, additionalProjectEntries, newsEntries, noticeEntries, careerEntries, enterpriseEntries, contentEntries, pages, autoPages, allPages,
+  projectEntries, additionalProjectEntries, newsEntries, noticeEntries, careerEntries, enterpriseEntries, contentEntries, contentDetails, pages, autoPages, allPages,
 } as const
 
 // Grouped exports are the canonical data boundary; named exports are kept for the unchanged presentation components.
 export { systemData, contentData }
 export { images, imageForSlug, themes, media, homeHero, ui, contactInfo, primaryNav, navGroups }
-export { allPages, pages, autoPages, contentEntries, projectEntries, additionalProjectEntries, newsEntries, noticeEntries, careerEntries, enterpriseEntries }
+export { allPages, pages, autoPages, contentEntries, projectEntries, additionalProjectEntries, newsEntries, noticeEntries, careerEntries, enterpriseEntries, contentDetails }
 
 const SDGsteps:SDGStep[]=[
  {n:'1',en:'No Poverty',bn:'দারিদ্র্যমুক্তি',enText:'Microfinance and livelihood pathways reduce economic vulnerability and help families build income resilience.',bnText:'ক্ষুদ্রঋণ ও জীবিকা সহায়তা অর্থনৈতিক ঝুঁকি কমায় এবং পরিবারকে আয়ভিত্তিক সহনশীলতা গড়তে সহায়তা করে।',Icon:Coins},

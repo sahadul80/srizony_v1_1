@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import SiteSearchPage from '../../components/SiteSearchPage'
+import SiteSearchPage from '@/components/pages/SiteSearchPage'
 
 export const metadata: Metadata = { title: 'সার্চ', robots: { index: true, follow: true } }
 

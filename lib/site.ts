@@ -1,11 +1,53 @@
 import { sql } from 'drizzle-orm'
-import { revalidatePath, unstable_cache } from 'next/cache'
+import { revalidatePath, revalidateTag, unstable_cache } from 'next/cache'
 import { contentData, systemData, donationInfo, SDGsteps } from '@/data/data'
 import { db, withDbRetry } from '@/lib/db'
 import type { NavGroup, NavItem, PageData } from '@/types/entityType'
-import { getPublishedFeed, getPublishedFieldNews } from '@/lib/cms/content'
+import { getPublishedFeed, getPublishedFieldNews, getPublishedContentDetailPage } from '@/lib/cms/content'
 
 export type CmsDocumentKey = 'site-global' | `page:${string}` | 'ui'
+
+// Public navigation deliberately hides these legacy menu entries. The underlying
+// content pages may remain available to CMS editors, but they must not appear in
+// desktop/mobile navigation or footer links. Apply this to both bundled and DB menus.
+const excludedNavigationPaths = new Set([
+  '/executive-secretariat', '/executive-secratariat',
+  '/senior-management',
+  '/public-relation', '/public-relations', '/public-relations-office', '/public-relations-unit',
+  '/social-enterprise',
+])
+const excludedNavigationLabels = new Set([
+  'executive secretariat', 'senior management', 'public relation', 'public relations', 'social enterprise',
+  'নির্বাহী সচিবালয়', 'নির্বাহী সচিবালয়', 'সিনিয়র ম্যানেজমেন্ট', 'সিনিয়র ম্যানেজমেন্ট',
+  'জনসংযোগ', 'সামাজিক উদ্যোগ',
+])
+function normalizeNavigationLabel(value: unknown) {
+  return String(value ?? '').trim().toLocaleLowerCase().replace(/[\s_-]+/g, ' ')
+}
+function isExcludedNavigationEntry(item: NavItem) {
+  const path = String(item.href || '/').split(/[?#]/, 1)[0].replace(/\/+$/, '').toLocaleLowerCase() || '/'
+  const en = normalizeNavigationLabel(item.label?.en)
+  const bn = normalizeNavigationLabel(item.label?.bn)
+  return excludedNavigationPaths.has(path) || excludedNavigationLabels.has(en) || excludedNavigationLabels.has(bn)
+}
+function filterNavigationItems(items: NavItem[]): NavItem[] {
+  return items
+    .filter((item) => !isExcludedNavigationEntry(item))
+    .map((item) => {
+      if (!item.children?.length) return item
+      const children = filterNavigationItems(item.children)
+      return { ...item, children: children.length ? children : undefined }
+    })
+}
+function filterNavigation(groups: NavGroup[], primary: NavItem[]) {
+  return {
+    primaryNav: filterNavigationItems(primary),
+    navGroups: groups
+      .filter((group) => !excludedNavigationLabels.has(normalizeNavigationLabel(group.label?.en))
+        && !excludedNavigationLabels.has(normalizeNavigationLabel(group.label?.bn)))
+      .map((group) => ({ ...group, items: filterNavigationItems(group.items) })),
+  }
+}
 
 const aliases: Record<string, string> = {
   '/category/news': '/news', '/category/projects': '/projects', '/notices': '/notice', '/about': '/about-us',
@@ -82,11 +124,11 @@ const cachedPublicDocuments = unstable_cache(
 
 async function getCmsNavigation(): Promise<{ primaryNav: NavItem[]; navGroups: NavGroup[] }> {
   const database = db
-  if (process.env.CMS_STATIC_FALLBACK === 'true' || isProductionBuild()) return { primaryNav: systemData.primaryNav, navGroups: systemData.navGroups }
+  if (process.env.CMS_STATIC_FALLBACK === 'true' || isProductionBuild()) return filterNavigation(systemData.navGroups, systemData.primaryNav)
   if (!database) throw new Error('DATABASE_URL is required to render public navigation. Configure the database and run npm run db:bootstrap.')
   const rows = await withDbRetry(() => database.execute(sql`
     SELECT g.id AS group_id, g.key AS group_key, g.label_en AS group_label_en, g.label_bn AS group_label_bn, g.sort_order AS group_sort_order,
-           i.id AS item_id, i.parent_id, i.label_en, i.label_bn, i.href, i.featured, i.sort_order
+           i.id AS item_id, i.parent_id, i.label_en, i.label_bn, i.href, i.featured, i.sort_order, i.menu_type, i.content_types
     FROM nav_groups g
     LEFT JOIN nav_items i ON i.group_id = g.id
     ORDER BY g.sort_order ASC, i.parent_id NULLS FIRST, i.sort_order ASC, i.id ASC
@@ -100,70 +142,21 @@ async function getCmsNavigation(): Promise<{ primaryNav: NavItem[]; navGroups: N
   }
   const buildItems = (items: Row[], parentId: number | null): NavItem[] => items.filter((row) => (row.parent_id == null ? parentId === null : Number(row.parent_id) === parentId)).sort((a,b) => Number(a.sort_order||0)-Number(b.sort_order||0) || Number(a.item_id)-Number(b.item_id)).map((row) => {
     const children = buildItems(items, Number(row.item_id))
-    return { label: { en: String(row.label_en), bn: String(row.label_bn) }, href: String(row.href), featured: Boolean(row.featured), children: children.length ? children : undefined }
+    const sectionTypes = ['richText','stats','cards','gallery','timeline','diagram','table','video','cta','noticeList','contact','donation','carousel','contentFeed','reports'] as const
+    let rawComponents: unknown = row.content_types
+    if (typeof rawComponents === 'string') { try { rawComponents = JSON.parse(rawComponents) } catch { rawComponents = [] } }
+    const validComponents = Array.isArray(rawComponents) ? rawComponents.filter((v): v is typeof sectionTypes[number] => typeof v === 'string' && sectionTypes.includes(v as typeof sectionTypes[number])) : []
+    const renderedComponents = validComponents.length ? Array.from(new Set(validComponents)) : undefined
+    return { label: { en: String(row.label_en), bn: String(row.label_bn) }, href: String(row.href), featured: Boolean(row.featured), menuType: row.menu_type === 'external' ? 'external' as const : 'page' as const, renderedComponents, children: children.length ? children : undefined }
   })
   const orderedGroups = Array.from(groups.values()).sort((a,b) => a.sort-b.sort)
   const primaryGroup = orderedGroups.find((group) => group.key === 'primary')
-  const primaryNav = primaryGroup ? buildItems(primaryGroup.items, null) : []
-  const navGroups = orderedGroups.filter((group) => group.key !== 'primary').map((group) => ({ label: group.label, items: buildItems(group.items, null) }))
+  const rawPrimaryNav = primaryGroup ? buildItems(primaryGroup.items, null) : []
+  const rawNavGroups = orderedGroups.filter((group) => group.key !== 'primary').map((group) => ({ label: group.label, items: buildItems(group.items, null) }))
+  const { primaryNav, navGroups } = filterNavigation(rawNavGroups, rawPrimaryNav)
 
-  // A database menu may have been seeded before the current multi-level
-  // hierarchy was introduced. Public runtime navigation must stay database-backed;
-  // never substitute the bundled menu when the CMS menu is incomplete.
-  const flattenHrefs = (items: NavItem[]): string[] => items.flatMap((item) => [item.href, ...(item.children ? flattenHrefs(item.children) : [])])
-  const availableHrefs = new Set([...flattenHrefs(primaryNav), ...navGroups.flatMap((group) => flattenHrefs(group.items))])
-  const requiredHrefs = [
-    '/', '/projects', '/news', '/notice', '/contact', '/donate',
-    '/about-us', '/founders-footprint', '/awards-recognition', '/partners-networks', '/senior-management', '/operational-structure',
-    '/at-a-glance', '/impact-on-sdg', '/governing-body', '/good-governance',
-    '/social-development', '/health-program', '/education-program', '/human-rights', '/human-resource', '/climate-change', '/agriculture-livelihood',
-    '/organizational-development', '/women-business-loan', '/small-enterprise-loan', '/agri-development-loan', '/household-migrant-loan', '/rural-development-loan', '/job-holders-loan', '/student-loan',
-    '/enterprise-development', '/enterprise/srizony-hospital', '/enterprise/srizony-university', '/enterprise/srizony-polytechnic', '/enterprise/srizony-printing-press', '/enterprise/srizony-filling-station', '/enterprise/srizony-internet', '/enterprise/srizony-computer-garden', '/enterprise/srizony-motors',
-    '/microfinance-program', '/job-circular',
-  ]
-  const whoWeAreGroup = navGroups.find((group) => group.label.en.trim().toLowerCase() === 'who we are')
-  const whatWeDoGroup = navGroups.find((group) => group.label.en.trim().toLowerCase() === 'what we do')
-  const hasDirectLink = (items: NavItem[] | undefined, href: string) => Boolean(items?.some((item) => item.href === href))
-  const hasNestedLink = (items: NavItem[] | undefined, parentHref: string, childHref: string) =>
-    Boolean(items?.find((item) => item.href === parentHref)?.children?.some((child) => child.href === childHref))
-  const whoDirectLinks = ['/about-us', '/at-a-glance', '/impact-on-sdg', '/good-governance']
-  const whatDirectLinks = ['/social-development', '/organizational-development', '/enterprise-development', '/microfinance-program', '/job-circular']
-  const requiredParentChildLinks: Array<[NavItem[] | undefined, string, string]> = [
-    ...['/founders-footprint', '/awards-recognition', '/partners-networks', '/senior-management', '/operational-structure', '/governing-body'].map((child) => [whoWeAreGroup?.items, '/about-us', child] as [NavItem[] | undefined, string, string]),
-    ...['/health-program', '/education-program', '/human-rights', '/human-resource', '/climate-change', '/agriculture-livelihood'].map((child) => [whatWeDoGroup?.items, '/social-development', child] as [NavItem[] | undefined, string, string]),
-    ...['/women-business-loan', '/small-enterprise-loan', '/agri-development-loan', '/household-migrant-loan', '/rural-development-loan', '/job-holders-loan', '/student-loan'].map((child) => [whatWeDoGroup?.items, '/organizational-development', child] as [NavItem[] | undefined, string, string]),
-    ...['/enterprise/srizony-hospital', '/enterprise/srizony-university', '/enterprise/srizony-polytechnic', '/enterprise/srizony-printing-press', '/enterprise/srizony-filling-station', '/enterprise/srizony-internet', '/enterprise/srizony-computer-garden', '/enterprise/srizony-motors'].map((child) => [whatWeDoGroup?.items, '/enterprise-development', child] as [NavItem[] | undefined, string, string]),
-  ]
-  const hasCurrentHierarchy = primaryNav[0]?.href === '/' && Boolean(whoWeAreGroup && whatWeDoGroup)
-    && whoDirectLinks.every((href) => hasDirectLink(whoWeAreGroup?.items, href))
-    && whatDirectLinks.every((href) => hasDirectLink(whatWeDoGroup?.items, href))
-    && requiredParentChildLinks.every(([items, parent, child]) => hasNestedLink(items, parent, child))
-  const currentItems = [...primaryNav, ...navGroups.flatMap((group) => group.items)]
-  const flattenItems = (items: NavItem[]): NavItem[] => items.flatMap((item) => [item, ...(item.children ? flattenItems(item.children) : [])])
-  const itemsByHref = new Map<string, NavItem>(flattenItems(currentItems).map((item) => [item.href, item] as const))
-  const requiredLabels: Record<string, string> = {
-    '/': 'Home', '/projects': 'Projects', '/news': 'News', '/notice': 'Notices', '/contact': 'Contact', '/donate': 'Donate Now',
-    '/about-us': 'About Us', '/founders-footprint': 'Founders Footprint', '/awards-recognition': 'Awards & Recognition',
-    '/partners-networks': 'Partners & Networks', '/senior-management': 'Senior Management', '/operational-structure': 'Operational Structure',
-    '/at-a-glance': 'At A Glance', '/impact-on-sdg': 'Impact on SDG', '/governing-body': 'Governing Body', '/good-governance': 'Good Governance',
-    '/social-development': 'Social Development', '/health-program': 'Health Program', '/education-program': 'Education Program',
-    '/human-rights': 'Human Rights', '/human-resource': 'Human Resource', '/climate-change': 'Climate Change', '/agriculture-livelihood': 'Agriculture & Livelihood',
-    '/organizational-development': 'Organizational Development', '/women-business-loan': 'Women Business Loans', '/small-enterprise-loan': 'Small Enterprise Loans',
-    '/agri-development-loan': 'Agriculture Loans', '/household-migrant-loan': 'Household Migrant Loans', '/rural-development-loan': 'Rural Development Loans',
-    '/job-holders-loan': 'Job Holder Loans', '/student-loan': 'Student Loans', '/enterprise-development': 'Enterprise Development',
-    '/enterprise/srizony-hospital': 'Srizony Hospital', '/enterprise/srizony-university': 'Srizony University',
-    '/enterprise/srizony-polytechnic': 'Srizony Polytechnic', '/enterprise/srizony-printing-press': 'Srizony Printing Press',
-    '/enterprise/srizony-filling-station': 'Srizony Filling Station', '/enterprise/srizony-internet': 'Srizony Internet',
-    '/enterprise/srizony-computer-garden': 'Srizony Computer Garden', '/enterprise/srizony-motors': 'Srizony Motors',
-    '/microfinance-program': 'Micro-finance Program', '/job-circular': 'Career / Job',
-  }
-  const labelsMatch = Object.entries(requiredLabels).every(([href, label]) => itemsByHref.get(href)?.label.en.trim() === label)
-  const groupLabelsMatch = whoWeAreGroup?.label.en.trim() === 'Who We Are' && whatWeDoGroup?.label.en.trim() === 'What We Do'
-
-  if (requiredHrefs.some((href) => !availableHrefs.has(href)) || !hasCurrentHierarchy || !labelsMatch || !groupLabelsMatch) {
-    throw new Error('CMS navigation is missing required destinations, labels, or parent-child links. Run npm run db:seed to synchronize the database menu, or correct it in the CMS.')
-  }
-
+  // Navigation remains fully CMS-controlled: editors may rename entries, move them,
+  // or remove links without the public site rejecting the whole navigation tree.
   if (!primaryNav.length && !navGroups.length) {
     throw new Error('CMS navigation is empty. Run npm run db:seed to populate navigation in PostgreSQL before serving public content.')
   }
@@ -172,7 +165,8 @@ async function getCmsNavigation(): Promise<{ primaryNav: NavItem[]; navGroups: N
 
 async function savePage(database: NonNullable<typeof db>, slug: string, value: unknown, actorEmail?: string, expectedUpdatedAt?: string) {
   const data = (value || {}) as Partial<PageData>
-  const status = data.status && ['draft', 'published', 'archived'].includes(data.status) ? data.status : 'published'
+  // The root route is the landing page, not an ordinary navigation page. Keep it published at all times.
+  const status = slug === '/' ? 'published' : data.status && ['draft', 'published', 'archived'].includes(data.status) ? data.status : 'published'
   const sortOrder = Number.isInteger(data.sortOrder) && Number(data.sortOrder) >= 0 ? Number(data.sortOrder) : 0
   const titleEn = data.title?.en || slug
   const titleBn = data.title?.bn || titleEn
@@ -235,6 +229,7 @@ export async function saveDocument(key: string, value: unknown, type: string, ac
       ON CONFLICT (id) DO UPDATE SET value = EXCLUDED.value, updated_at = now()
     `))
     revalidatePath('/', 'layout')
+    revalidateTag('site-content', 'max')
     return
   }
   if (key.startsWith('page:')) {
@@ -242,6 +237,7 @@ export async function saveDocument(key: string, value: unknown, type: string, ac
     await savePage(database, slug, value, actorEmail, expectedUpdatedAt)
     revalidatePath(slug === '/' ? '/' : slug)
     revalidatePath(slug === '/' ? '/bn' : `/bn${slug}`)
+    revalidateTag('site-content', 'max')
     return
   }
   throw new Error(`Unsupported CMS document type: ${type}`)
@@ -286,6 +282,137 @@ async function getDatabaseSdgSteps() {
   }
 }
 
+function portfolioBilingual(value: unknown): { en: string; bn: string } {
+  if (typeof value === 'string') return { en: value.trim(), bn: value.trim() }
+  if (!value || typeof value !== 'object') return { en: '', bn: '' }
+  const record = value as Record<string, unknown>
+  const en = typeof record.en === 'string' ? record.en.trim() : ''
+  const bn = typeof record.bn === 'string' ? record.bn.trim() : ''
+  return { en: en || bn, bn: bn || en }
+}
+
+function hasPortfolioCopy(value: unknown) {
+  const valueBi = portfolioBilingual(value)
+  return Boolean(valueBi.en || valueBi.bn)
+}
+
+function portfolioPeopleItems(value: unknown) {
+  if (!Array.isArray(value)) return []
+  return value.map((person: any) => {
+    const title = portfolioBilingual(person?.name ?? person?.title ?? person?.label)
+    const role = portfolioBilingual(person?.role ?? person?.designation ?? person?.position)
+    const bio = portfolioBilingual(person?.bio ?? person?.description ?? person?.summary)
+    const combinedTitle = {
+      en: [title.en, role.en && role.en !== title.en ? role.en : ''].filter(Boolean).join(' — '),
+      bn: [title.bn, role.bn && role.bn !== title.bn ? role.bn : ''].filter(Boolean).join(' — '),
+    }
+    const imageSrc = typeof person?.image === 'string' ? person.image : typeof person?.photo === 'string' ? person.photo : ''
+    return {
+      title: combinedTitle,
+      body: bio.en || bio.bn ? bio : undefined,
+      image: imageSrc ? { src: imageSrc, alt: title } : undefined,
+      href: typeof person?.href === 'string' ? person.href : undefined,
+      tag: role.en || role.bn ? role : undefined,
+      icon: 'users' as const,
+    }
+  }).filter((item) => item.title.en || item.title.bn)
+}
+
+function applyPortfolioToPage(page: PageData, global: Record<string, any>): PageData {
+  const portfolio = global.portfolio && typeof global.portfolio === 'object' ? global.portfolio : {}
+  const contact = global.contactInfo && typeof global.contactInfo === 'object' ? global.contactInfo : {}
+  const slug = page.slug || ''
+  let sections = [...(page.sections || [])]
+  const about = portfolioBilingual(portfolio.about)
+  const mission = portfolioBilingual(portfolio.mission)
+  const vision = portfolioBilingual(portfolio.vision)
+  const values = Array.isArray(portfolio.values) ? portfolio.values : []
+
+  if (slug === '/about-us' && hasPortfolioCopy(portfolio.about)) {
+    let applied = false
+    sections = sections.map((section) => {
+      if (!applied && section.type === 'richText') {
+        applied = true
+        const biParagraphs: Array<{ en: string; bn: string }> = []
+        const enParts = about.en.split(/\n\s*\n/).map((part: string) => part.trim()).filter(Boolean)
+        const bnParts = about.bn.split(/\n\s*\n/).map((part: string) => part.trim()).filter(Boolean)
+        const count = Math.max(enParts.length, bnParts.length)
+        for (let i = 0; i < count; i++) biParagraphs.push({ en: enParts[i] || bnParts[i] || '', bn: bnParts[i] || enParts[i] || '' })
+        return { ...section, body: biParagraphs.length ? biParagraphs : section.body }
+      }
+      if (section.type === 'cards' && /mission|goal|value/i.test(section.heading?.en || '')) {
+        const items: any[] = []
+        if (hasPortfolioCopy(portfolio.mission)) items.push({ title: { en: 'Mission', bn: 'মিশন' }, body: mission, icon: 'heart' })
+        if (hasPortfolioCopy(portfolio.vision)) items.push({ title: { en: 'Vision', bn: 'দৃষ্টিভঙ্গি' }, body: vision, icon: 'leaf' })
+        for (const value of values) {
+          const title = portfolioBilingual((value as any)?.title ?? (value as any)?.name)
+          const body = portfolioBilingual((value as any)?.description ?? (value as any)?.body)
+          if (title.en || title.bn) items.push({ title, body: body.en || body.bn ? body : undefined, icon: 'users' })
+        }
+        if (items.length) return { ...section, heading: { en: 'Mission, Vision & Values', bn: 'মিশন, ভিশন ও মূল্যবোধ' }, items: items as any, columns: 3 as const }
+      }
+      return section
+    })
+  }
+
+  if (slug === '/mission-vision' || slug === '/mission-and-vision') {
+    const items: any[] = []
+    if (hasPortfolioCopy(portfolio.mission)) items.push({ title: { en: 'Mission', bn: 'মিশন' }, body: mission, icon: 'heart' })
+    if (hasPortfolioCopy(portfolio.vision)) items.push({ title: { en: 'Vision', bn: 'দৃষ্টিভঙ্গি' }, body: vision, icon: 'leaf' })
+    for (const value of values) {
+      const title = portfolioBilingual((value as any)?.title ?? (value as any)?.name)
+      const body = portfolioBilingual((value as any)?.description ?? (value as any)?.body)
+      if (title.en || title.bn) items.push({ title, body: body.en || body.bn ? body : undefined, icon: 'users' })
+    }
+    if (items.length) sections = [{ type: 'cards', heading: { en: 'Mission, Vision & Values', bn: 'মিশন, ভিশন ও মূল্যবোধ' }, columns: 3, items } as any, ...sections.filter((section) => section.type !== 'cards')]
+  }
+
+  if (slug === '/governing-body' && Array.isArray(portfolio.governingBody) && portfolio.governingBody.length) {
+    const items = portfolioPeopleItems(portfolio.governingBody)
+    sections = sections.map((section) => section.type === 'cards' && /governing body|member/i.test(section.heading?.en || '') ? { ...section, items: items as any } : section)
+  }
+  if (slug === '/executive-committee' && Array.isArray(portfolio.executiveCommittee) && portfolio.executiveCommittee.length) {
+    const items = portfolioPeopleItems(portfolio.executiveCommittee)
+    const matching = sections.findIndex((section) => section.type === 'cards')
+    if (matching >= 0) sections[matching] = { ...(sections[matching] as any), heading: { en: 'Executive Committee Members', bn: 'নির্বাহী কমিটির সদস্যবৃন্দ' }, items } as any
+    else sections.push({ type: 'cards', heading: { en: 'Executive Committee Members', bn: 'নির্বাহী কমিটির সদস্যবৃন্দ' }, columns: 3, items } as any)
+  }
+  if (slug === '/senior-management' && Array.isArray(portfolio.seniorManagement) && portfolio.seniorManagement.length) {
+    const items = portfolioPeopleItems(portfolio.seniorManagement)
+    const matching = sections.findIndex((section) => section.type === 'cards')
+    if (matching >= 0) sections[matching] = { ...(sections[matching] as any), items } as any
+  }
+  if (['/teams', '/team', '/our-team', '/our-people'].includes(slug) && Array.isArray(portfolio.teams) && portfolio.teams.length) {
+    const items = portfolioPeopleItems(portfolio.teams)
+    const matching = sections.findIndex((section) => section.type === 'cards')
+    if (matching >= 0) sections[matching] = { ...(sections[matching] as any), items } as any
+  }
+
+  // Shared contact data is the source of truth for every rendered contact section.
+  if (contact && (contact.address || contact.primaryPhone || contact.email || contact.footprint)) {
+    sections = sections.map((section) => {
+      if (section.type !== 'contact') return section
+      const footprint = Array.isArray(contact.footprint) ? contact.footprint.map((loc: any) => ({
+        name: portfolioBilingual(loc.name),
+        address: portfolioBilingual(loc.address),
+        mapQuery: String(loc.mapQuery || loc.address?.en || loc.name?.en || ''),
+        phone: typeof loc.phone === 'string' ? loc.phone : undefined,
+        email: typeof loc.email === 'string' ? loc.email : undefined,
+        kind: loc.kind === 'site' || loc.kind === 'branch' ? loc.kind : 'footprint',
+      })) : section.locations
+      return {
+        ...section,
+        address: hasPortfolioCopy(contact.address) ? portfolioBilingual(contact.address) : section.address,
+        phones: Array.isArray(contact.phones) && contact.phones.length ? contact.phones : contact.primaryPhone ? [contact.primaryPhone] : section.phones,
+        emails: contact.email ? [String(contact.email)] : section.emails,
+        locations: footprint,
+      }
+    })
+  }
+
+  return { ...page, sections }
+}
+
 export async function getPublicSiteSnapshot(path = '/') {
   const canonicalSlug = resolvePagePath(path)
   // Public content never silently falls back to data.ts at runtime. Use the bundled
@@ -308,113 +435,140 @@ export async function getPublicSiteSnapshot(path = '/') {
   const customThemeEntries = Object.entries(themeOverrides).filter(([name]) => !(name in systemData.themes)).map(([name, value]) => [name, value])
   const global = {
     ...(useStaticFallback ? systemData : { primaryNav: [], navGroups: [], themes: systemData.themes, ui: systemData.ui }), ...override, ...navigation,
+    // Keep complete homepage hero defaults available for older global snapshots while honoring CMS overrides.
+    homeHero: {
+      ...systemData.homeHero,
+      ...(override.homeHero && typeof override.homeHero === 'object' ? override.homeHero : {}),
+      slides: Array.isArray((override.homeHero as any)?.slides) ? (override.homeHero as any).slides : systemData.homeHero.slides,
+      stats: Array.isArray((override.homeHero as any)?.stats) ? (override.homeHero as any).stats : systemData.homeHero.stats,
+    },
     // The seeded PostgreSQL global snapshot is the source of truth for payment options; bundled entries are only a missing-field bootstrap default.
     donationInfo: Array.isArray(override.donationInfo) ? override.donationInfo : Array.isArray(override.paymentInfo) ? override.paymentInfo : serializableDonationInfo,
     SDGsteps: sdgSteps,
     ui: { ...systemData.ui, ...overrideUi, en: { ...systemData.ui.en, ...(overrideUi.en || {}) }, bn: { ...systemData.ui.bn, ...(overrideUi.bn || {}) } },
     themes: { ...mergedThemes, ...Object.fromEntries(customThemeEntries) },
   }
-  const fallbackPage = useStaticFallback ? (contentData.allPages[canonicalSlug] ?? null) : null
-  if (rawPageOverride?.__unpublished) return { global, page: null, canonicalSlug, notFound: true, updatedAt: rawPageOverride.__cmsMeta?.updatedAt || null }
-  let page = pageOverride ? ({ ...fallbackPage, ...pageOverride } as PageData) : fallbackPage
+  const fallbackPage = (useStaticFallback || canonicalSlug === '/') ? (contentData.allPages[canonicalSlug] ?? null) : null
+  if (canonicalSlug !== '/' && rawPageOverride?.__unpublished) return { global, page: null, canonicalSlug, notFound: true, updatedAt: rawPageOverride.__cmsMeta?.updatedAt || null }
+  // Detail pages are assembled from cms_content_items at request time. This deliberately
+  // takes precedence over the old page.render_cache snapshot so CMS edits are visible.
+  const cmsDetail = useStaticFallback ? { handled: false, page: null } : await getPublishedContentDetailPage(canonicalSlug)
+  if (cmsDetail.handled && !cmsDetail.page) return { global, page: null, canonicalSlug, notFound: true, updatedAt: null }
+  let page = cmsDetail.handled ? cmsDetail.page : pageOverride ? ({ ...fallbackPage, ...pageOverride } as PageData) : fallbackPage
 
-  // Keep the essential home-page story intact when an older CMS page override
-  // predates one or more of the current homepage sections. In particular, an
-  // empty or absent notice list must never remove the Notice & Circular rail.
-  if (canonicalSlug === '/' && page) {
-    // Bundled page content is only a build-time preview. At runtime, a published database page is authoritative.
-    const bundledHome = useStaticFallback ? contentData.allPages['/'] : null
-    const bundledSections = bundledHome?.sections || []
-    const currentSections = [...(page.sections || [])]
-    type HomeSection = PageData['sections'][number]
-    const ensureHomeSection = (
-      matches: (section: HomeSection) => boolean,
-      isEmpty?: (section: HomeSection) => boolean,
-    ) => {
-      const fallback = bundledSections.find(matches)
-      if (!fallback) return
-      const currentIndex = currentSections.findIndex(matches)
-      if (currentIndex < 0) currentSections.push(fallback)
-      else if (isEmpty?.(currentSections[currentIndex])) currentSections[currentIndex] = fallback
-    }
-    ensureHomeSection((section) => section.type === 'richText')
-    ensureHomeSection((section) => section.type === 'diagram' && section.variant === 'sdg')
-    ensureHomeSection((section) => section.type === 'cards' && section.variant === 'impact', (section) => section.type === 'cards' && !(section.items || []).length)
-
-    // Pull the exact card collection and field-news carousel from their published database pages.
-    // Bundled page content is considered only in production-build or explicit preview mode.
-    const resolveReferencePage = (slug: string): PageData | null => {
-      const fallback = useStaticFallback ? (contentData.allPages[slug] ?? null) : null
-      const raw = docs.get(`page:${slug}`) as (Partial<PageData> & { __cmsMeta?: unknown; __unpublished?: boolean }) | undefined
-      if (!raw || raw.__unpublished) return fallback
-      const cleaned = { ...raw }
-      delete cleaned.__cmsMeta
-      delete cleaned.__unpublished
-      return { ...fallback, ...cleaned } as PageData
-    }
-    const enterprisePage = resolveReferencePage('/enterprise-development')
-    const bundledEnterprisePage = useStaticFallback ? contentData.allPages['/enterprise-development'] : null
-    const enterpriseFallback = enterprisePage?.sections.find((section) => section.type === 'cards' && (section.heading?.en || '').trim().toLowerCase() === 'srizony enterprises')
-      ?? enterprisePage?.sections.find((section) => section.type === 'cards' && section.items.some((item) => item.href?.startsWith('/enterprise/')))
-      ?? bundledEnterprisePage?.sections.find((section) => section.type === 'cards')
-    if (enterpriseFallback?.type === 'cards') {
-      const homeEnterpriseCards = { ...enterpriseFallback, heading: { en: 'Srizony Enterprises', bn: 'সৃজনী উদ্যোগসমূহ' } }
-      const enterpriseIndex = currentSections.findIndex((section) => section.type === 'cards' && ((section.heading?.en || '').trim().toLowerCase() === 'srizony enterprises' || (section.variant !== 'impact' && section.items.some((item) => item.href?.startsWith('/enterprise/')))))
-      if (enterpriseIndex < 0) currentSections.push(homeEnterpriseCards)
-      else currentSections[enterpriseIndex] = homeEnterpriseCards
-    }
-
-    const socialPage = resolveReferencePage('/social-development')
-    const bundledSocialPage = useStaticFallback ? contentData.allPages['/social-development'] : null
-    const newsFallback = socialPage?.sections.find((section) => section.type === 'carousel' && (section.heading?.en || '').trim().toLowerCase() === 'news from the field')
-      ?? socialPage?.sections.find((section) => section.type === 'carousel')
-      ?? bundledSocialPage?.sections.find((section) => section.type === 'carousel' && (section.heading?.en || '').trim().toLowerCase() === 'news from the field')
-      ?? bundledSocialPage?.sections.find((section) => section.type === 'carousel')
-    if (newsFallback?.type === 'carousel') {
-      const homeFieldNews = {
-        ...newsFallback,
-        eyebrow: undefined,
-        heading: { en: 'News from the Field', bn: 'মাঠপর্যায়ের সংবাদ' },
-        body: undefined,
-        presentation: 'scroller' as const,
-      }
-      const newsIndex = currentSections.findIndex((section) => section.type === 'carousel' && (section.heading?.en || '').trim().toLowerCase() === 'news from the field')
-      if (newsIndex < 0) currentSections.push(homeFieldNews)
-      else currentSections[newsIndex] = homeFieldNews
-    }
-
-    page = { ...page, sections: currentSections }
-  }
+  // Normalize the homepage sections once; the homepage renderer maps managed components by
+  // CMS section identity and renders any added generic section through SectionRenderer.
+  if (canonicalSlug === '/' && page) page = ensureLandingPageSections(page, !pageOverride)
 
   // Field-news cards are managed as CMS project items. The JSON page snapshot keeps the
   // section layout, while published CMS items supply its live cards at runtime.
   if (!useStaticFallback && page && (canonicalSlug === '/' || canonicalSlug === '/social-development')) {
     const fieldItems = await getPublishedFieldNews(12)
-    if (fieldItems.length > 0) {
-      page = {
-        ...page,
-        sections: page.sections.map((section) => {
-          const isFieldNews = section.type === 'carousel' && (
-            (section.heading?.en || '').trim().toLowerCase() === 'news from the field'
-            || canonicalSlug === '/social-development'
-          )
-          if (!isFieldNews || section.type !== 'carousel') return section
-          return {
-            ...section,
+    page = {
+      ...page,
+      sections: page.sections.map((section) => {
+        const sectionHeading = (section.type === 'carousel' ? section.heading?.en : '')?.trim().toLowerCase()
+        const isLandingStoryRail = canonicalSlug === '/' && section.type === 'carousel' && (
+          section.homeComponent === 'stories' || sectionHeading === 'success story of srizony' || sectionHeading === 'news from the field'
+        )
+        const isFieldNews = section.type === 'carousel' && (section.dataSource !== 'manual') && (isLandingStoryRail || canonicalSlug === '/social-development')
+        if (!isFieldNews || section.type !== 'carousel') return section
+        return {
+          ...section,
+          ...(canonicalSlug === '/social-development' ? {
             eyebrow: undefined,
             heading: { en: 'News from the Field', bn: 'মাঠপর্যায়ের সংবাদ' },
             body: undefined,
-            presentation: 'scroller' as const,
-            items: fieldItems.map((entry) => ({
-              title: entry.title,
-              body: entry.summary,
-              // Keep cards structurally complete if an editor publishes an item before attaching a photo.
-              // This is only a remote stock-image presentation placeholder; all story text remains CMS data.
-              image: { src: entry.image || 'https://images.unsplash.com/photo-1766858669684-4e501b3b9f9f?auto=format&fit=crop&w=1600&q=85', alt: entry.title },
-              href: entry.href || `/news/${entry.slug}`,
-              tag: { en: entry.date, bn: entry.date },
-            })),
+          } : {}),
+          presentation: 'scroller' as const,
+          items: fieldItems.map((entry) => ({
+            title: entry.title,
+            body: entry.summary,
+            // Keep cards structurally complete if an editor publishes an item before attaching a photo.
+            // This is only a remote stock-image presentation placeholder; all story text remains CMS data.
+            image: { src: entry.image || 'https://images.unsplash.com/photo-1766858669684-4e501b3b9f9f?auto=format&fit=crop&w=1600&q=85', alt: entry.title },
+            href: entry.href || `/news/${entry.slug}`,
+            tag: { en: entry.date, bn: entry.date },
+          })),
+        }
+      }),
+    }
+  }
+
+  // Resolve the main content catalogues from PostgreSQL at request time. Page layout,
+  // typography and section ordering still come from the refined page design; the editable
+  // titles, descriptions, images and details come from cms_content_items.
+  if (!useStaticFallback && page) {
+    const catalogueConfig: Record<string, { component: 'project' | 'news' | 'enterprise' | 'notice' | 'partner-agency' | 'health-service' | 'loan-product'; fallbackImage: string; route: string }> = {
+      '/projects': { component: 'project', fallbackImage: '/images/general/project-3.jpg', route: '/projects' },
+      '/news': { component: 'news', fallbackImage: '/images/general/project-2.jpg', route: '/news' },
+      '/enterprise-development': { component: 'enterprise', fallbackImage: '/images/general/enterprise.jpg', route: '/enterprise' },
+      '/notice': { component: 'notice', fallbackImage: '/images/general/project-1.jpg', route: '/notice' },
+      '/partners-networks': { component: 'partner-agency', fallbackImage: '/images/field/partnership.jpg', route: '/partners-networks' },
+      '/health-program': { component: 'health-service', fallbackImage: '/images/programs/health-program.jpg', route: '/health-program' },
+      '/loans': { component: 'loan-product', fallbackImage: '/images/loans/small-enterprise-loan.jpg', route: '/loans' },
+    }
+    const config = catalogueConfig[canonicalSlug]
+    const collection = config && db ? await getPublishedFeed([config.component], 100) : []
+    if (config && db) {
+      const cards = collection.map((entry, index) => ({
+        title: entry.title,
+        body: entry.summary,
+        href: entry.href || `${config!.route}/${entry.slug}`,
+        image: entry.image ? { src: entry.image, alt: entry.title } : undefined,
+        icon: (config!.component === 'health-service' ? 'heart' : config!.component === 'partner-agency' ? 'building' : config!.component === 'loan-product' ? 'coins' : 'briefcase') as any,
+        tag: config!.component === 'loan-product' ? { en: 'Loan product', bn: 'ঋণ পণ্য' } : undefined,
+      }))
+      page = {
+        ...page,
+        sections: page.sections.map((section) => {
+          if (canonicalSlug === '/projects' && section.type === 'carousel' && section.collectionKind === 'projects') {
+            return { ...section, items: collection.map((entry) => ({ title: entry.title, body: entry.summary, image: { src: entry.image || config!.fallbackImage, alt: entry.title }, href: entry.href || `${config!.route}/${entry.slug}` })) }
           }
+          if (canonicalSlug === '/news' && section.type === 'carousel' && section.collectionKind === 'news') {
+            return { ...section, items: collection.map((entry) => ({ title: entry.title, body: entry.summary, image: { src: entry.image || config!.fallbackImage, alt: entry.title }, href: entry.href || `${config!.route}/${entry.slug}`, tag: { en: entry.date, bn: entry.date } })) }
+          }
+          if (canonicalSlug === '/enterprise-development' && section.type === 'cards' && (section.heading?.en || '').trim().toLowerCase() === 'srizony enterprises') {
+            return { ...section, items: cards }
+          }
+          if (canonicalSlug === '/partners-networks' && section.type === 'cards' && (section.heading?.en || '').trim().toLowerCase() === 'partnership focus') {
+            return { ...section, heading: { en: 'Present Donor & Partner Agencies', bn: 'বর্তমান দাতা ও অংশীদার সংস্থা' }, columns: 3 as const, items: cards }
+          }
+          if (canonicalSlug === '/health-program' && section.type === 'cards' && (section.heading?.en || '').trim().toLowerCase() === 'service components') {
+            return { ...section, items: cards }
+          }
+          if (canonicalSlug === '/loans' && section.type === 'cards' && (section.heading?.en || '').trim().toLowerCase() === 'loan products') {
+            return { ...section, items: cards }
+          }
+          if (canonicalSlug === '/notice' && section.type === 'noticeList') {
+            return { ...section, items: collection.map((entry) => ({ date: entry.date, title: entry.title, body: entry.summary, href: entry.href || `${config!.route}/${entry.slug}` })) }
+          }
+          return section
+        }),
+      }
+    }
+  }
+
+  // The home page also shares the live enterprise collection instead of freezing the
+  // seed-time cards inside pages.render_cache.
+  if (!useStaticFallback && page && canonicalSlug === '/') {
+    const enterpriseItems = await getPublishedFeed(['enterprise'], 8)
+    if (db) {
+      page = {
+        ...page,
+        sections: page.sections.map((section) => {
+          const homeComponent = String(section.homeComponent ?? '').trim().toLowerCase()
+          const isEnterpriseSection = section.type === 'cards' && section.dataSource !== 'manual' && (
+            (section.heading?.en || '').trim().toLowerCase() === 'srizony enterprises'
+            || homeComponent === 'enterprises'
+            || section.items.some((item) => item.href?.startsWith('/enterprise/'))
+          )
+          return isEnterpriseSection
+            ? { ...section, heading: { en: 'Srizony Enterprises', bn: 'সৃজনী উদ্যোগসমূহ' }, items: enterpriseItems.map((entry) => ({
+                title: entry.title, body: entry.summary, href: entry.href || `/enterprise/${entry.slug}`,
+                image: entry.image ? { src: entry.image, alt: entry.title } : undefined, icon: 'building' as const,
+              })) }
+            : section
         }),
       }
     }
@@ -429,6 +583,7 @@ export async function getPublicSiteSnapshot(path = '/') {
     // Content feeds are filled on the server so components never call an API for their data.
     page = { ...page, sections: await Promise.all(page.sections.map(async (section) => section.type === 'contentFeed' ? { ...section, items: await getPublishedFeed(section.components) } : section)) }
   }
+  if (page) page = applyPortfolioToPage(page, global as Record<string, any>)
   return { global, page, canonicalSlug, notFound: !page, updatedAt: rawPageOverride?.__cmsMeta?.updatedAt || null }
 }
 
@@ -464,10 +619,20 @@ export async function getCmsEditorData(slug?: string) {
   }
   const canonicalSlug = resolvePagePath(slug)
   const docs = await readDocuments([`page:${canonicalSlug}`])
-  const override = docs.get(`page:${canonicalSlug}`) as Record<string, unknown> | undefined
-  const meta = override?.__cmsMeta
-  if (override) delete override.__cmsMeta
-  return { slug: canonicalSlug, fallback: getFallbackPage(canonicalSlug), override: override || null, meta: meta || null }
+  const rawOverride = docs.get(`page:${canonicalSlug}`) as Record<string, unknown> | undefined
+  const meta = rawOverride?.__cmsMeta
+  const fallback = ensureLandingPageSections(getFallbackPage(canonicalSlug))
+  let override = rawOverride ? { ...rawOverride } : null
+  if (override) {
+    delete override.__cmsMeta
+    delete override.__unpublished
+  }
+  if (canonicalSlug === '/') {
+    const source = { ...(fallback || {}), ...(override || {}), slug: '/' } as PageData
+    source.sections = Array.isArray(override?.sections) ? override!.sections as PageData['sections'] : (fallback?.sections || [])
+    override = ensureLandingPageSections(source, !rawOverride) as unknown as Record<string, unknown>
+  }
+  return { slug: canonicalSlug, fallback, override: override || null, meta: canonicalSlug === '/' ? { ...(meta || {}), status: 'published' } : (meta || null) }
 }
 
 export async function getCmsMenuIndex() {
@@ -480,14 +645,16 @@ export async function getCmsMenuIndex() {
       FROM pages ORDER BY sort_order ASC, slug ASC
     `))
     const availablePages = new Map<string, any>()
-    if (process.env.CMS_STATIC_FALLBACK === 'true' || isProductionBuild()) fallbackPages.forEach((page) => availablePages.set(page.slug, { slug: page.slug, title: page.title, subtitle: page.subtitle, status: 'published', sortOrder: 0 }))
+    const bundledHome = fallbackPages.find((page) => page.slug === '/')
+    if (bundledHome) availablePages.set('/', { slug: '/', title: bundledHome.title, subtitle: bundledHome.subtitle, status: 'published', sortOrder: -1 })
+    if (process.env.CMS_STATIC_FALLBACK === 'true' || isProductionBuild()) fallbackPages.forEach((page) => availablePages.set(page.slug, { slug: page.slug, title: page.title, subtitle: page.subtitle, status: 'published', sortOrder: page.slug === '/' ? -1 : 0 }))
     for (const raw of rows.rows as Array<Record<string, unknown>>) {
       const slug = String(raw.slug)
       const fallback = availablePages.get(slug)
       availablePages.set(slug, {
         slug, title: { en: String(raw.title_en || fallback?.title.en || slug), bn: String(raw.title_bn || fallback?.title.bn || '') },
         subtitle: raw.subtitle_en || raw.subtitle_bn ? { en: String(raw.subtitle_en || fallback?.subtitle?.en || ''), bn: String(raw.subtitle_bn || fallback?.subtitle?.bn || '') } : fallback?.subtitle,
-        status: String(raw.status || 'published'), sortOrder: Number(raw.sort_order || 0),
+        status: slug === '/' ? 'published' : String(raw.status || 'published'), sortOrder: slug === '/' ? -1 : Number(raw.sort_order || 0),
         updatedAt: raw.updated_at instanceof Date ? raw.updated_at.toISOString() : String(raw.updated_at || ''),
       })
     }
@@ -524,8 +691,27 @@ export async function getAllCmsContent() {
       if (String(raw.status || 'published') !== 'published') continue
       const slug = String(raw.slug)
       const page = overrides.get(slug) as any
-      if (page && typeof page === 'object') availablePages.set(slug, { slug, title: page.title || { en: slug, bn: slug }, subtitle: page.subtitle, status: raw.status || 'published' })
+      if (page && typeof page === 'object') availablePages.set(slug, { slug, title: page.title || { en: slug, bn: slug }, subtitle: page.subtitle, status: 'published' })
     }
+
+    // Keep the canonical landing page discoverable to every consumer of the page catalogue,
+    // even when an older database has no pages row for '/'. Home is not an ordinary slug.
+    const bundledHome = contentData.allPages['/']
+    if (bundledHome) {
+      const storedHome = overrides.get('/') as Partial<PageData> | undefined
+      const mergedHome = ensureLandingPageSections({
+        ...bundledHome,
+        ...(storedHome || {}),
+        slug: '/',
+        status: 'published',
+        sections: Array.isArray(storedHome?.sections) ? storedHome.sections : bundledHome.sections,
+      } as PageData, !storedHome)
+      if (mergedHome) {
+        overrides.set('/', mergedHome)
+        availablePages.set('/', { slug: '/', title: mergedHome.title || bundledHome.title, subtitle: mergedHome.subtitle ?? bundledHome.subtitle, status: 'published', sortOrder: -1 })
+      }
+    }
+
     const normalizedGlobal = normalizeGlobal((globalResult.rows[0] as Record<string, unknown> | undefined)?.value)
     if (!normalizedGlobal && !useStaticFallback) throw new Error('CMS global state is missing. Run the database seed before serving CMS content.')
     return { global: (normalizedGlobal || fallbackGlobal) as any, overrides: Object.fromEntries(overrides.entries()), availablePages: Array.from(availablePages.values()), availableMenus: await getAvailableMenus() }
@@ -533,6 +719,56 @@ export async function getAllCmsContent() {
     console.error('CMS content read failed', error)
     throw error instanceof Error ? error : new Error('Unable to read CMS content.')
   }
+}
+
+const normalizeLandingHeading = (value: unknown) => String(value ?? '').trim().toLocaleLowerCase().replace(/[\s_-]+/g, ' ')
+const isLandingAreasSection = (section: any) => section?.type === 'cards' && normalizeLandingHeading(section.heading?.en) === 'integrated development areas'
+const LANDING_MANAGED_SECTION_KEYS = [
+  ['hero', 'carousel', 'landing page hero'],
+  ['growth', 'stats', 'growing together'],
+  ['missionVisionValues', 'cards', 'mission, vision & values'],
+  ['locations', 'richText', 'our offices across bangladesh'],
+  ['developmentAreas', 'cards', 'integrated development areas'],
+  ['stories', 'carousel', 'success story of srizony'],
+  ['donate', 'cta', 'support srizony'],
+] as const
+function isManagedLandingSection(section: any, type: string, heading: string) {
+  return section?.type === type && normalizeLandingHeading(section.heading?.en) === heading
+}
+
+/**
+ * Normalize stable identities for custom homepage modules without suppressing older generic
+ * sections. A missing managed section is seeded only when there is no saved page override;
+ * once a CMS editor has saved the root page, removing a section is respected.
+ */
+function ensureLandingPageSections(page: PageData | null, addMissingManaged = true): PageData | null {
+  if (!page || page.slug !== '/') return page
+  const currentSections = Array.isArray(page.sections) ? [...page.sections] : []
+  const defaults = contentData.allPages['/']?.sections || []
+  const defaultFor = (type: string, heading: string) => defaults.find((section) => isManagedLandingSection(section, type, heading))
+  const legacyStories = currentSections.find((section): section is Extract<PageData['sections'][number], { type: 'carousel' }> => isManagedLandingSection(section, 'carousel', 'news from the field'))
+  const storiesFallback = defaults.find((section): section is Extract<PageData['sections'][number], { type: 'carousel' }> => isManagedLandingSection(section, 'carousel', 'success story of srizony'))
+  if (legacyStories && storiesFallback) {
+    legacyStories.homeComponent = 'stories'
+    legacyStories.eyebrow = storiesFallback.eyebrow
+    legacyStories.heading = storiesFallback.heading
+  }
+  for (const [component, type, heading] of LANDING_MANAGED_SECTION_KEYS) {
+    const current = currentSections.find((section) => section.homeComponent === component || isManagedLandingSection(section, type, heading))
+    if (current) {
+      current.homeComponent = component
+      continue
+    }
+    if (addMissingManaged) {
+      const fallback = defaultFor(type, heading)
+      if (fallback) currentSections.push({ ...fallback, homeComponent: component })
+    }
+  }
+  if (addMissingManaged && !currentSections.some((section) => section.homeComponent === 'developmentAreas' || isLandingAreasSection(section))) {
+    const fallback = defaults.find(isLandingAreasSection)
+    if (fallback) currentSections.push({ ...fallback, homeComponent: 'developmentAreas' })
+  }
+  return { ...page, slug: '/', sections: currentSections }
 }
 
 export function getFallbackPage(slug: string) { return contentData.allPages[resolvePagePath(slug)] ?? null }

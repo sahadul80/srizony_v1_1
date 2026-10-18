@@ -120,6 +120,6 @@ SELECT CASE ce.category WHEN 'project' THEN 'project' WHEN 'notice' THEN 'notice
   CASE WHEN ce.date_value ~ '^\d{4}-\d{2}-\d{2}' THEN LEFT(ce.date_value, 10)::date ELSE CURRENT_DATE END,
   'published'
 FROM content_entries ce LEFT JOIN media_items m ON m.id = ce.image_id
-WHERE ce.category IN ('project','notice','career','enterprise')
+WHERE ce.category = 'career'
   AND NOT EXISTS (SELECT 1 FROM cms_content_items)
 ON CONFLICT (component, slug) DO NOTHING;
