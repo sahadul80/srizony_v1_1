@@ -1,41 +1,20 @@
-/node_modules
-/.next
-/out
-/build
-/dist
-/coverage
-/playwright-report
-/test-results
-.env
-.env.*
+# Next.js output
+.next/
+out/
+build/
+dist/
+
+# Dependencies
+node_modules/
+
+# Local environment and secrets
+.env*
 !.env.example
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
 
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Testing
-coverage/
-
-# TypeScript
+# Tool output / OS files
 *.tsbuildinfo
-next-env.d.ts
-
-# IDE and editors
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
 .DS_Store
-
-# OS files
-Thumbs.db
-.vercel
+__MACOSX/
+.vercel/
+coverage/
+npm-debug.log*

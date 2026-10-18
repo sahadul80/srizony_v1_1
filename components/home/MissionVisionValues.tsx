@@ -8,12 +8,6 @@ import type { Lang, PageData } from '@/types/entityType'
 import Illustration from '@/components/home/Illustration'
 import HomeSectionActions from '@/components/home/HomeSectionActions'
 
-
-/**
- * Pinned, scroll-driven sequence. The wrapper is N screens tall; the stage inside is sticky.
- * Scrolling advances the active step, and each step slides in from below while the previous
- * one slides up and fades. Dots / rail items jump to a step.
- */
 type MissionSection = Extract<PageData['sections'][number], { type: 'cards' }>
 const normalizeHeading = (value?: string) => (value ?? '').trim().toLocaleLowerCase().replace(/[\s_-]+/g, ' ')
 
@@ -105,15 +99,10 @@ export default function MissionVisionValues({ lang, page }: { lang: Lang; page: 
               {steps.map((step, i) => {
                 const state = i === index ? 'is-active' : i < index ? 'is-past' : 'is-next'
                 return (
-                  <div key={step.stepKey} className={`sf-story-text ${state}`} aria-hidden={i !== index}>
+                  <div key={step.stepKey} className={`sf-story-text ${state} backdrop-blur-2xl rounded-lg`} aria-hidden={i !== index}>
                     <span className="sf-story-num">{localizeDigits(`0${i + 1}`, lang)}</span>
                     <h3 className="sf-h2 sf-story-title">{step.kicker[lang]}</h3>
                     <p className="sf-story-body">{step.body[lang]}</p>
-                    <ul className="sf-story-chips">
-                      {step.chips.map((c, j) => (
-                        <li key={j} style={{ '--i': j } as CSSProperties}>{c[lang]}</li>
-                      ))}
-                    </ul>
                   </div>
                 )
               })}
@@ -133,15 +122,7 @@ export default function MissionVisionValues({ lang, page }: { lang: Lang; page: 
                   <span className="sf-rail-label">{step.kicker[lang]}</span>
                 </button>
               ))}
-              <span className="sf-rail-line" aria-hidden="true">
-                <i style={{ transform: `scaleY(calc(var(--sp, 0) / ${count - 1}))` }} />
-              </span>
             </nav>
-          </div>
-
-          <div className={`sf-story-hint ${index === count - 1 ? 'is-hidden' : ''}`} aria-hidden="true">
-            <span>{(source as any)?.scrollHint?.[lang] || STORY_INTRO.hint[lang]}</span>
-            <ChevronDown size={18} />
           </div>
         </div>
       </div>

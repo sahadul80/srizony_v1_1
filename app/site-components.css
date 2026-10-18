@@ -221,7 +221,7 @@ a.sf-card:hover, .sf-card--link:hover { transform: translateY(-4px); box-shadow:
 .sf-fp-row { display: grid; grid-template-columns: 20px 1fr; gap: 8px; font-size: 0.875rem; }
 .sf-fp-row dt { color: var(--sf-primary); padding-top: 3px; }
 .sf-fp-row dd { margin: 0; line-height: 1.5; }
-.sf-block { display: block; }
+.sf-block { display: flex; flex-direction: column; margin: 16px;}
 .sf-fp-maplink { display: inline-flex; align-items: center; gap: 4px; margin-left: 8px; font-size: 0.78rem; font-weight: 600; color: var(--sf-primary); text-decoration: none; }
 .sf-fp-maplink:hover { text-decoration: underline; }
 .sf-fp-phone { font-weight: 700; color: var(--sf-ink); text-decoration: none; font-variant-numeric: tabular-nums; }

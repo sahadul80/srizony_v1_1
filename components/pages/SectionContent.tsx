@@ -66,7 +66,6 @@ export default function SectionContent({ section }: { section: Section }) {
                 <h3 className="sf-h3">{item.title[lang]}</h3>
                 {item.body && <p className="sf-body">{item.body[lang]}</p>}
                 {item.chips?.length ? <ul className="sf-chips">{item.chips.map((chip, chipIndex) => <li key={chipIndex} className="sf-chip">{chip[lang]}</li>)}</ul> : null}
-                {item.href && <span className="sf-more">{readMore} <ArrowRight size={15} aria-hidden="true" /></span>}
               </div>
             </AnimatedCard>
           })}
